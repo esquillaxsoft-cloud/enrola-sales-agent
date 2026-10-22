@@ -2,6 +2,7 @@ package com.enrola.salesagent.conversation;
 
 import java.time.Clock;
 import java.util.EnumSet;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.Set;
 
@@ -58,6 +59,22 @@ public class ConversationStarter {
 		}
 		Conversation conversation = new Conversation(lead, agent.version(), agent.defaultLocale(), clock.instant());
 		return new StartResult(conversations.save(conversation), Outcome.STARTED);
+	}
+
+	/**
+	 * Testing aid for the UI: throw a conversation away and start the lead again from scratch,
+	 * on the current agent version. (Once bookings exist, this must also cancel the booking.)
+	 */
+	@Transactional
+	public Conversation restart(Long conversationId) {
+		Conversation old = conversations.findById(conversationId)
+				.orElseThrow(() -> new NoSuchElementException("No conversation " + conversationId));
+		Lead lead = old.getLead();
+		conversations.delete(old);
+		// Hibernate runs inserts before deletes at flush, which would trip the one-conversation-per-lead
+		// constraint, so delete explicitly first.
+		conversations.flush();
+		return start(lead).conversation();
 	}
 
 }
