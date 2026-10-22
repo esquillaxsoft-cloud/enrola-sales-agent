@@ -103,23 +103,9 @@ models together.
   going back to `false`.
 - **Tone** matches the sample transcript: short, plain, a little blunt, Australian, no
   exclamation marks, no "I hope this finds you well".
-
-### Reply window: 8am–8pm, lead's local time
-A reply at 2am reads as a bot and isn't welcome anyway. So the agent only *replies* between 8am
-and 8pm, in the lead's local time, seven days a week.
-- **The turn is deferred, not just the send.** A message that arrives at 11pm is stored, and the
-  conversation is marked due at 8am. The agent generates its reply then. Replying at 8am from a
-  reply generated at 11pm would risk offering slots that have since gone, and would ignore
-  anything else the lead sent overnight. Deferring means all overnight messages are handled in
-  one turn.
-- **State changes are not deferred.** `STOP` at 11pm opts the lead out straight away. Abuse is
-  detected straight away. Only the reply waits.
-- A scheduled job picks up due conversations. The clock is injected, so tests and the UI can move
-  time forward instead of waiting until 8am.
-- The window is strict for now. A lead who replies at 8:05pm mid-booking waits until morning,
-  which may cost bookings. It's listed as an open question (§6).
-- The opener is scheduled by the platform, which should respect the same window.
-- Not handled: public holidays.
+- **The agent replies whenever the lead messages, at any hour.** A lead who replies at 10pm is
+  engaged at 10pm, and making them wait until morning risks losing them. Only the unsolicited
+  opener is time-restricted, and the platform schedules that.
 
 ### Prompts and message templates: ready for translation, English only
 Everything the agent says or is told lives in **files, not Java strings**, laid out so a second
@@ -183,9 +169,7 @@ per language.
 **In scope**
 - Agent turn: prompt file, structured output, tool calls, state persistence
 - Mock lead API and mock Calendly (availability, booking, cancelling)
-- Agent-led rescheduling and cancellation after a booking
-- 8am–8pm reply window in the lead's local time, with overnight replies deferred to the morning
-- Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
+- Agent-led rescheduling and cancellation after a booking- Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
 - Moderation: OpenAI's moderation endpoint on inbound messages, used to detect abuse
 - Minimal web UI: seed leads, play the lead, view structured output, reset
 - Unit tests plus a small set of opt-in end-to-end scenarios against the real model
@@ -216,6 +200,11 @@ per language.
   should be batched into one turn. The prototype serialises turns per conversation instead.
 - **A templated opener** gives up personalisation on the first message in exchange for
   predictability and approval-ability.
+- **Replying at any hour, not only 8am–8pm.** I first planned an 8am–8pm reply window, with
+  overnight replies deferred to the morning, because an instant 2am reply hints that it's a bot.
+  I dropped it: someone who messages at 10pm is engaged right then, and an answer the next
+  morning risks losing them. It also removed a scheduler and a deferred-message state from the
+  prototype. Worth revisiting if late-night replies turn out to hurt trust or opt-out rates.
 
 ## 6. Questions for the agent designer / Comparato
 
@@ -225,7 +214,7 @@ per language.
   the phone turns into a calendar event. No links, because the advisor calls the lead.
 - *Advisor name?* It's on the Calendly invite, so it's available from the booking.
 - *Reschedule or cancel after booking?* The agent handles it end to end, with no human involved.
-- *Reply hours?* 8am–8pm in the lead's local time (see §3).
+- *Reply hours?* Any time the lead messages (see §5).
 - *Advisor availability?* One Calendly event type pooling all advisors (round robin).
 
 **Still open**
@@ -236,8 +225,6 @@ per language.
 - Is Comparato's Calendly plan able to book through the API? Calendly's booking API is newer than
   its read APIs and depends on the plan. Worth checking before go-live, because without it the
   agent can't book.
-- Should a lead who's mid-booking at 8:05pm get a reply, rather than waiting until 8am?
-
 > **Why the agent doesn't deny being an AI.** A lead who sincerely asks "is this a bot?" in a
 > health-insurance sales conversation is deciding how much to trust what they're told. Telling
 > them no is a misleading statement of fact, which is a risk under the Australian Consumer Law and
