@@ -38,6 +38,9 @@ public class Message {
 	/** The model's structured output (JSON) for the turn that produced this message. */
 	private String agentOutput;
 
+	/** The platform's id for an inbound SMS, used to ignore webhook retries. */
+	private String platformMessageId;
+
 	@Column(nullable = false)
 	private Instant createdAt;
 
@@ -54,7 +57,14 @@ public class Message {
 	}
 
 	public static Message fromLead(String body, Instant at) {
-		return new Message(Sender.LEAD, body, null, null, at);
+		return fromLead(null, body, at);
+	}
+
+	/** @param platformMessageId the platform's id for this SMS, or null when there isn't one */
+	public static Message fromLead(String platformMessageId, String body, Instant at) {
+		Message message = new Message(Sender.LEAD, body, null, null, at);
+		message.platformMessageId = platformMessageId;
+		return message;
 	}
 
 	public static Message fromTemplate(String templateKey, String body, Instant at) {
@@ -91,6 +101,10 @@ public class Message {
 
 	public String getAgentOutput() {
 		return agentOutput;
+	}
+
+	public String getPlatformMessageId() {
+		return platformMessageId;
 	}
 
 	public Instant getCreatedAt() {

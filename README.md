@@ -82,7 +82,12 @@ can book a call. Everything after that hardens and proves it.
 - **Enrola's platform owns SMS transport, lead ingestion and scheduling the first message.** The
   agent is a service with two operations: *start a conversation for lead X* and *handle inbound
   message Y for lead X*. Both return the outbound message (if any) and the conversation state.
-  The prototype exposes these as REST endpoints so the boundary is explicit.
+  The prototype exposes these as REST endpoints so the boundary is explicit (see §8).
+- **Inbound SMS are addressed by conversation id**, which the platform gets back when it starts a
+  lead's conversation. A duplicate lead for the same number is pointed at the existing
+  conversation, so the platform never has two conversations to choose between for one phone.
+- **Webhooks get retried.** The platform sends its own id for each inbound SMS; a repeat id
+  returns the original reply instead of running the agent again and texting the lead twice.
 - **The lead API and Calendly are mocked** behind interfaces (`LeadClient`, `CalendlyClient`) so
   swapping in real clients doesn't touch the agent. The mocks assume the real APIs can do what
   the agent needs (read availability, book, cancel, return the advisor's name). Confirming that
@@ -317,6 +322,24 @@ from a clean slate, stop the app and delete `./data/`.
 
 Stack: Spring Boot 4.1, Java 21, Thymeleaf, Bootstrap 5.3 (WebJar), Spring Data JPA, Flyway,
 H2 in PostgreSQL compatibility mode.
+
+### Platform API
+What Enrola's platform would call. Every response includes the conversation `state`
+(`status`, `goalMet`, `unsubscribed`, `ended`, `endReason`, `booking`). Errors are RFC 9457
+problem details. No authentication: this is a local prototype.
+
+| Call | Does |
+|---|---|
+| `POST /api/leads/{leadId}/conversation` | Fetch the lead and start its conversation. `201` with the opener in `outbound` when started; `200` with no `outbound` when the lead (`ALREADY_STARTED`) or its number (`SAME_NUMBER_OPEN`) already has one |
+| `POST /api/conversations/{id}/inbound` | An SMS from the lead: `{"messageId": "...", "body": "..."}`. Returns the reply in `outbound` (or null) and the new state. A repeated `messageId` returns `"duplicate": true` and the original reply |
+| `GET /api/conversations/{id}` | The whole conversation, for support and debugging |
+
+```bash
+curl -X POST http://localhost:8080/api/leads/lead-john/conversation
+```
+```bash
+curl -X POST http://localhost:8080/api/conversations/1/inbound -H "Content-Type: application/json" -d '{"messageId":"sms-1","body":"All of the above"}'
+```
 
 ## 9. How I used AI
 
