@@ -72,7 +72,11 @@ class ConversationPageTest {
 		assertThat(conversation.getMessages().get(1).getAgentOutput()).contains("\"stage\":\"ENGAGE\"");
 
 		mvc.perform(get("/conversations/{id}", johnsConversation))
-				.andExpect(content().string(containsString("Save money")));
+				.andExpect(content().string(containsString("Save money")))
+				// The turn panel and the state the platform sees.
+				.andExpect(content().string(containsString("Agent's read")))
+				.andExpect(content().string(containsString("ENGAGE")))
+				.andExpect(content().string(containsString("What the platform sees")));
 	}
 
 	@Test

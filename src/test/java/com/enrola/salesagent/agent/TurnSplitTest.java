@@ -58,7 +58,7 @@ class TurnSplitTest {
 			Conversation c = conversations.findWithMessagesById(id).orElseThrow();
 			c.append(Message.fromLead("actually, mornings are best", Instant.now()));
 			conversations.flush();
-			return AgentOutput.reply("Hospital, extras or both?", Stage.PREFERENCE, "first message");
+			return AgentTurn.of(AgentOutput.reply("Hospital, extras or both?", Stage.PREFERENCE, "first message"));
 		}).when(agent).reply(any());
 
 		TurnResult result = turns.handleInbound(id, "save money");
@@ -74,7 +74,7 @@ class TurnSplitTest {
 			Conversation c = conversations.findWithMessagesById(id).orElseThrow();
 			c.append(Message.fromLead("hello?", Instant.now()));
 			conversations.flush();
-			return new AgentOutput("No worries.", Stage.CLOSING, false, true, false, "please don't text me");
+			return AgentTurn.of(new AgentOutput("No worries.", Stage.CLOSING, false, true, false, "please don't text me"));
 		}).when(agent).reply(any());
 
 		TurnResult result = turns.handleInbound(id, "please don't text me again");
@@ -86,7 +86,7 @@ class TurnSplitTest {
 	@Test
 	void ifTheModelFailsARetryOfTheSameSmsResumesTheTurn() {
 		doThrow(new AgentUnavailableException("timeout"))
-				.doReturn(AgentOutput.reply("Hospital, extras or both?", Stage.PREFERENCE, "retry"))
+				.doReturn(AgentTurn.of(AgentOutput.reply("Hospital, extras or both?", Stage.PREFERENCE, "retry")))
 				.when(agent).reply(any());
 
 		assertThatThrownBy(() -> turns.handleInbound(id, "sms-1", "save money"))

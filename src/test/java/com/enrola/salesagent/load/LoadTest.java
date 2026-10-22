@@ -36,6 +36,7 @@ import org.springframework.test.context.ActiveProfiles;
 import com.enrola.salesagent.agent.AgentOutput;
 import com.enrola.salesagent.agent.AgentOutput.Stage;
 import com.enrola.salesagent.agent.AgentReplier;
+import com.enrola.salesagent.agent.AgentTurn;
 import com.enrola.salesagent.conversation.ConversationRepository;
 import com.enrola.salesagent.lead.LeadClient;
 import com.enrola.salesagent.lead.LeadRecord;
@@ -93,8 +94,8 @@ class LoadTest {
 				catch (InterruptedException e) {
 					Thread.currentThread().interrupt();
 				}
-				return AgentOutput.reply("Got it. Would tomorrow morning suit for a quick 15 minute call?",
-						Stage.SUGGEST_CALL, "load test");
+				return AgentTurn.of(AgentOutput.reply("Got it. Would tomorrow morning suit for a quick 15 minute call?",
+						Stage.SUGGEST_CALL, "load test"));
 			};
 		}
 

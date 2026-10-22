@@ -10,7 +10,10 @@
         <h1 class="h3 mb-0">
             <span th:text="${lead.givenName}">John</span>
             <span class="text-muted fw-normal" th:text="|#${conversation.id}|">#1</span>
-            <span class="badge text-bg-secondary align-middle fs-6" th:text="${conversation.status}">ACTIVE</span>
+            <span class="badge align-middle fs-6"
+                  th:with="status=${conversation.status.name()}"
+                  th:classappend="${status == 'ACTIVE'} ? 'text-bg-warning' : (${status == 'BOOKED'} ? 'text-bg-success' : 'text-bg-secondary')"
+                  th:text="${conversation.status}">ACTIVE</span>
         </h1>
         <form th:action="@{/conversations/{id}/reset(id=${conversation.id})}" method="post"
               onsubmit="return confirm('Delete this conversation and start again?')">
@@ -25,6 +28,19 @@
         <div class="col-lg-4 order-lg-2">
             <div class="card">
                 <div class="card-body small">
+                    <!-- The state the API returns to Enrola's platform with every response. -->
+                    <h2 class="h6">What the platform sees</h2>
+                    <dl class="row mb-3">
+                        <dt class="col-5">Status</dt>
+                        <dd class="col-7">
+                            <span th:text="${conversation.status}">ACTIVE</span>
+                            <span th:if="${conversation.endReason}" class="text-muted" th:text="|(${conversation.endReason})|"></span>
+                        </dd>
+                        <dt class="col-5">Goal met</dt><dd class="col-7" th:text="${conversation.goalMet} ? 'yes' : 'no'">no</dd>
+                        <dt class="col-5">Unsubscribed</dt><dd class="col-7" th:text="${conversation.unsubscribed} ? 'yes' : 'no'">no</dd>
+                        <dt class="col-5">Ended</dt><dd class="col-7" th:text="${conversation.status.terminal} ? 'yes' : 'no'">no</dd>
+                        <dt class="col-5">Objections</dt><dd class="col-7" th:text="${conversation.objectionCount}">0</dd>
+                    </dl>
                     <h2 class="h6">Lead</h2>
                     <dl class="row mb-0">
                         <dt class="col-5">Lead id</dt><dd class="col-7" th:text="${lead.externalId}">lead-john</dd>
@@ -70,6 +86,34 @@
                                 <span th:if="${m.templateKey}" th:text="|· template ${m.templateKey}|"></span>
                             </th:block>
                         </div>
+                        <!-- What the agent made of this message: its structured output, tools and cost. -->
+                        <details th:if="${fromLead and turns[m.id] != null}" th:with="t=${turns[m.id]}"
+                                 class="turn small text-start mt-1">
+                            <summary class="text-muted">
+                                Agent's read:
+                                <span th:if="${t.stage}" class="badge text-bg-light border" th:text="${t.stage}">PREFERENCE</span>
+                                <span th:each="f : ${t.flags}" class="badge text-bg-danger" th:text="${f}">objection</span>
+                                <span th:each="c : ${t.moderation}" class="badge text-bg-danger" th:text="|moderation: ${c}|">harassment</span>
+                                <span th:unless="${#lists.isEmpty(t.toolCalls)}" th:text="|· ${#lists.size(t.toolCalls)} tool call(s)|"></span>
+                            </summary>
+                            <div class="border rounded-2 p-2 mt-1 bg-body-tertiary">
+                                <div th:if="${t.note}"><strong>Note:</strong> <span th:text="${t.note}">wants both</span></div>
+                                <div th:if="${t.stage != null and t.reply == null}"><strong>Reply:</strong>
+                                    <em>none (the model chose to stay silent, or code replaced it)</em></div>
+                                <div th:if="${t.retriedForLength}" class="text-warning-emphasis">
+                                    First reply was over 320 characters; this is the retry.</div>
+                                <div th:unless="${#lists.isEmpty(t.toolCalls)}" class="mt-1">
+                                    <strong>Tools:</strong>
+                                    <ol class="mb-0 ps-3">
+                                        <li th:each="call : ${t.toolCalls}">
+                                            <code th:text="|${call.name}(${call.arguments})|">get_available_slots({...})</code>
+                                            <div class="text-muted text-break" th:text="|→ ${call.result}|">→ {...}</div>
+                                        </li>
+                                    </ol>
+                                </div>
+                                <div th:if="${t.usage}" class="text-muted mt-1" th:text="${t.usage}">gpt-6.1-sol · 1 round · ...</div>
+                            </div>
+                        </details>
                     </div>
                 </div>
                 <div class="card-footer">

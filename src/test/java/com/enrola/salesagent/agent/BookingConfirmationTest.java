@@ -53,7 +53,7 @@ class BookingConfirmationTest {
 		Instant slot = calendly.availableStartTimes(now, now.plus(Duration.ofDays(7))).getFirst();
 		doAnswer(invocation -> {
 			tools.execute("book_call", "{\"start_time\":\"%s\"}".formatted(slot), id);
-			return AgentOutput.reply("Done! See you then!", Stage.BOOKED, "booked");
+			return AgentTurn.of(AgentOutput.reply("Done! See you then!", Stage.BOOKED, "booked"));
 		}).when(agent).reply(any());
 
 		TurnResult result = turns.handleInbound(id, "the first one works");
@@ -70,7 +70,7 @@ class BookingConfirmationTest {
 	@Test
 	void aTurnThatDoesntBookSendsTheModelsReplyAsUsual() {
 		Long id = starter.startLead("lead-john").conversation().getId();
-		doAnswer(invocation -> AgentOutput.reply("Are you free Thursday arvo?", Stage.SUGGEST_CALL, "ask"))
+		doAnswer(invocation -> AgentTurn.of(AgentOutput.reply("Are you free Thursday arvo?", Stage.SUGGEST_CALL, "ask")))
 				.when(agent).reply(any());
 
 		TurnResult result = turns.handleInbound(id, "maybe");

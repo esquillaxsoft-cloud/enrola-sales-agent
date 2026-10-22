@@ -16,6 +16,9 @@ import org.springframework.web.client.RestClientException;
 
 import com.enrola.salesagent.agent.AgentOutput;
 import com.enrola.salesagent.agent.AgentReplier;
+import com.enrola.salesagent.agent.AgentTurn;
+import com.enrola.salesagent.agent.AgentTurn.ToolCall;
+import com.enrola.salesagent.agent.AgentTurn.Usage;
 import com.enrola.salesagent.agent.AgentUnavailableException;
 import com.enrola.salesagent.agent.BookingTools;
 import com.enrola.salesagent.agent.PromptBuilder;
@@ -64,20 +67,29 @@ public class OpenAiAgentReplier implements AgentReplier {
 	}
 
 	@Override
-	public AgentOutput reply(Conversation conversation) {
+	public AgentTurn reply(Conversation conversation) {
 		return reply(conversation, null);
 	}
 
 	@Override
-	public AgentOutput reply(Conversation conversation, String correction) {
+	public AgentTurn reply(Conversation conversation, String correction) {
+		long started = System.nanoTime();
 		List<Object> input = new ArrayList<>(prompts.input(conversation));
 		if (correction != null) {
 			// A note from our code, not from the lead, after the transcript.
 			input.add(Map.of("role", "developer", "content", correction));
 		}
+		List<ToolCall> toolCalls = new ArrayList<>();
+		long inputTokens = 0;
+		long cachedTokens = 0;
+		long outputTokens = 0;
 		for (int round = 1; round <= MAX_TOOL_ROUNDS; round++) {
 			JsonNode response = send(request(conversation, input));
 			logUsage(conversation, round, response);
+			JsonNode usage = response.path("usage");
+			inputTokens += usage.path("input_tokens").asLong();
+			cachedTokens += usage.path("input_tokens_details").path("cached_tokens").asLong();
+			outputTokens += usage.path("output_tokens").asLong();
 
 			List<JsonNode> calls = new ArrayList<>();
 			response.path("output").forEach(item -> {
@@ -86,13 +98,17 @@ public class OpenAiAgentReplier implements AgentReplier {
 				}
 			});
 			if (calls.isEmpty()) {
-				return parse(response);
+				Usage total = new Usage(response.path("model").asString(properties.model()), round, inputTokens,
+						cachedTokens, outputTokens, (System.nanoTime() - started) / 1_000_000);
+				return new AgentTurn(parse(response), List.copyOf(toolCalls), total);
 			}
 			// Send back what the model produced (its reasoning and the calls), then each call's result.
 			response.path("output").forEach(input::add);
 			for (JsonNode call : calls) {
-				String result = tools.execute(call.path("name").asString(), call.path("arguments").asString(),
-						conversation.getId());
+				String name = call.path("name").asString();
+				String arguments = call.path("arguments").asString();
+				String result = tools.execute(name, arguments, conversation.getId());
+				toolCalls.add(new ToolCall(name, arguments, result));
 				input.add(Map.of("type", "function_call_output", "call_id", call.path("call_id").asString(),
 						"output", result));
 			}
