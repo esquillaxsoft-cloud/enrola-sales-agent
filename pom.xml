@@ -16,6 +16,7 @@
 	<properties>
 		<java.version>21</java.version>
 		<bootstrap.version>5.3.7</bootstrap.version>
+		<libphonenumber.version>9.0.32</libphonenumber.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -41,6 +42,13 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+
+		<!-- Phone parsing/formatting, so the same number in different formats matches -->
+		<dependency>
+			<groupId>com.googlecode.libphonenumber</groupId>
+			<artifactId>libphonenumber</artifactId>
+			<version>${libphonenumber.version}</version>
 		</dependency>
 
 		<!-- Bootstrap served from the jar so the UI works offline; locator allows version-less URLs -->
