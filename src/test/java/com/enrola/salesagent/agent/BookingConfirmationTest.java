@@ -48,7 +48,9 @@ class BookingConfirmationTest {
 	@Test
 	void aCallBookedByTheModelIsConfirmedFromTheTemplate() {
 		Long id = starter.startLead("lead-john").conversation().getId();
-		Instant slot = calendly.availableStartTimes(clock.instant(), clock.instant().plus(Duration.ofDays(7))).getFirst();
+		// Read the clock once: two reads can be nanoseconds apart, making the range just over 7 days.
+		Instant now = clock.instant();
+		Instant slot = calendly.availableStartTimes(now, now.plus(Duration.ofDays(7))).getFirst();
 		doAnswer(invocation -> {
 			tools.execute("book_call", "{\"start_time\":\"%s\"}".formatted(slot), id);
 			return AgentOutput.reply("Done! See you then!", Stage.BOOKED, "booked");
