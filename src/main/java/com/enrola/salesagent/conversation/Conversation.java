@@ -87,9 +87,18 @@ public class Conversation {
 		messages.add(message);
 	}
 
+	/** A new booking, or a moved one: either way the conversation now points at this call. */
 	public void book(Booking booking) {
 		this.booking = booking;
 		this.status = ConversationStatus.BOOKED;
+	}
+
+	/** The lead cancelled their call. Back to ACTIVE, so the agent can try to rebook once. */
+	void cancelBooking() {
+		this.booking = null;
+		if (status == ConversationStatus.BOOKED) {
+			this.status = ConversationStatus.ACTIVE;
+		}
 	}
 
 	/** Use {@link OptOuts#optOut}, which also records the number on the suppression list. */
