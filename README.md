@@ -8,8 +8,9 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 
 > **Status:** the agent holds real conversations with OpenAI, books, moves and cancels calls in a
 > mock Calendly, and the hard rules hold: opt-out, objections, abuse (moderation plus the model's
-> flag), the message cap, and the 320-character limit (one retry). Still to come: a panel showing
-> the model's output per turn, and end-to-end scenario tests.
+> flag), the message cap, and the 320-character limit (one retry). Each lead message on the
+> conversation page expands to show the agent's read of it: stage, flags, tool calls, tokens and
+> time. Still to come: end-to-end scenario tests.
 
 ## Run it
 

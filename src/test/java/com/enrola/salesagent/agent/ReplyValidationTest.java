@@ -113,8 +113,8 @@ class ReplyValidationTest {
 		verify(agent, never()).reply(any(), anyString());
 	}
 
-	static AgentOutput reply(String text) {
-		return AgentOutput.reply(text, Stage.PREFERENCE, "test");
+	static AgentTurn reply(String text) {
+		return AgentTurn.of(AgentOutput.reply(text, Stage.PREFERENCE, "test"));
 	}
 
 }

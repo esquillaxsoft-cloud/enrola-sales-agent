@@ -83,7 +83,7 @@ class OpenAiAgentReplierTest {
 						{\\"reply\\":\\"Fair enough - a lot of people want both. Hospital, extras or both?\\",\\"stage\\":\\"PREFERENCE\\",\\"objection\\":false,\\"unsubscribe\\":false,\\"abusive\\":false,\\"note\\":\\"wants both\\"}"""),
 						MediaType.APPLICATION_JSON));
 
-		AgentOutput output = replier.reply(conversation);
+		AgentOutput output = replier.reply(conversation).output();
 
 		assertThat(output.reply()).startsWith("Fair enough");
 		assertThat(output.stage()).isEqualTo(AgentOutput.Stage.PREFERENCE);
@@ -118,7 +118,7 @@ class OpenAiAgentReplierTest {
 						{\\"reply\\":\\"I've got Tuesday 9:00 am. Does that work?\\",\\"stage\\":\\"OFFER_TIMES\\",\\"objection\\":false,\\"unsubscribe\\":false,\\"abusive\\":false,\\"note\\":\\"offered times\\"}"""),
 						MediaType.APPLICATION_JSON));
 
-		AgentOutput output = replier.reply(conversation);
+		AgentOutput output = replier.reply(conversation).output();
 
 		assertThat(output.reply()).isEqualTo("I've got Tuesday 9:00 am. Does that work?");
 		server.verify();

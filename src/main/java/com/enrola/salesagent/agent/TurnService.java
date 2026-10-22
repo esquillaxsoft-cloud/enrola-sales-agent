@@ -1,6 +1,8 @@
 package com.enrola.salesagent.agent;
 
 import java.time.Clock;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -118,18 +120,40 @@ public class TurnService {
 			return tx.execute(status -> endForAbuse(conversationId, prepared, abuse));
 		}
 
-		AgentOutput output = replier.reply(prepared.conversation());
-		if (SmsText.tooLong(output.reply()) && !bookingChanged(conversationId, prepared)) {
-			int length = SmsText.plain(output.reply()).strip().length();
-			output = replier.reply(prepared.conversation(), ("Your reply was %d characters. An SMS reply must be at most %d "
-					+ "characters: write it again, shorter.").formatted(length, SmsText.MAX_LENGTH));
-			if (SmsText.tooLong(output.reply())) {
+		AgentTurn turn = replier.reply(prepared.conversation());
+		boolean retried = false;
+		if (SmsText.tooLong(turn.output().reply()) && !bookingChanged(conversationId, prepared)) {
+			int length = SmsText.plain(turn.output().reply()).strip().length();
+			AgentTurn second = replier.reply(prepared.conversation(), ("Your reply was %d characters. An SMS reply must "
+					+ "be at most %d characters: write it again, shorter.").formatted(length, SmsText.MAX_LENGTH));
+			if (SmsText.tooLong(second.output().reply())) {
 				// Never send a cut-off SMS; a retry of this inbound message resumes the turn.
 				throw new AgentUnavailableException("Reply still over " + SmsText.MAX_LENGTH + " characters after a retry");
 			}
+			turn = combine(turn, second);
+			retried = true;
 		}
-		AgentOutput finalOutput = output;
-		return tx.execute(status -> complete(conversationId, prepared, finalOutput));
+		AgentTurn finalTurn = turn;
+		boolean retriedForLength = retried;
+		return tx.execute(status -> complete(conversationId, prepared, finalTurn, retriedForLength));
+	}
+
+	/** The second attempt's output, with the tools and cost of both attempts. */
+	private static AgentTurn combine(AgentTurn first, AgentTurn second) {
+		List<AgentTurn.ToolCall> tools = new ArrayList<>(first.toolCalls());
+		tools.addAll(second.toolCalls());
+		AgentTurn.Usage usage = first.usage() == null ? second.usage() : first.usage().plus(second.usage());
+		return new AgentTurn(second.output(), tools, usage);
+	}
+
+	/** What's kept on the lead's message about the turn it started (shown in the UI's turn panel). */
+	private String record(AgentTurn turn, boolean retriedForLength) {
+		Map<String, Object> record = new LinkedHashMap<>();
+		record.put("output", turn.output());
+		record.put("toolCalls", turn.toolCalls());
+		record.put("usage", turn.usage());
+		record.put("retriedForLength", retriedForLength);
+		return json.writeValueAsString(record);
 	}
 
 	private TurnResult endForAbuse(Long conversationId, Prepared prepared, List<String> categories) {
@@ -173,11 +197,12 @@ public class TurnService {
 		return Prepared.needsModel(conversation, inbound);
 	}
 
-	private TurnResult complete(Long conversationId, Prepared prepared, AgentOutput output) {
+	private TurnResult complete(Long conversationId, Prepared prepared, AgentTurn turn, boolean retriedForLength) {
+		AgentOutput output = turn.output();
 		Long inboundId = prepared.inboundId();
 		Conversation conversation = load(conversationId);
 		Message inbound = inboundIn(conversation, inboundId);
-		inbound.recordAgentOutput(json.writeValueAsString(output));
+		inbound.recordAgentOutput(record(turn, retriedForLength));
 
 		// A booking or reschedule landed during the model call: confirm it with the template, whatever
 		// the model wrote, and even if a newer SMS arrived meanwhile (the call is booked either way).

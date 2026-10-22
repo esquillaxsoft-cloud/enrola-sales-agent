@@ -31,11 +31,14 @@ class ConversationController {
 	private final ConversationRepository conversations;
 	private final TurnService turns;
 	private final ConversationStarter starter;
+	private final TurnViews turnViews;
 
-	ConversationController(ConversationRepository conversations, TurnService turns, ConversationStarter starter) {
+	ConversationController(ConversationRepository conversations, TurnService turns, ConversationStarter starter,
+			TurnViews turnViews) {
 		this.conversations = conversations;
 		this.turns = turns;
 		this.starter = starter;
+		this.turnViews = turnViews;
 	}
 
 	@GetMapping
@@ -43,6 +46,7 @@ class ConversationController {
 		Conversation conversation = conversations.findWithMessagesById(id)
 				.orElseThrow(() -> new NoSuchElementException("No conversation " + id));
 		model.addAttribute("conversation", conversation);
+		model.addAttribute("turns", turnViews.of(conversation));
 		model.addAttribute("maxLength", MAX_LEAD_MESSAGE);
 		return "conversation";
 	}

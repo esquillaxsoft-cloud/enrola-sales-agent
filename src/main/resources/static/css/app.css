@@ -1,3 +1,13 @@
+/* The "Agent's read" panel under each lead message: compact, and readable in full when opened. */
+details.turn summary {
+    cursor: pointer;
+}
+
+details.turn code {
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
 /* "Agent is typing" dots on the conversation page. */
 .typing {
     display: inline-flex;
