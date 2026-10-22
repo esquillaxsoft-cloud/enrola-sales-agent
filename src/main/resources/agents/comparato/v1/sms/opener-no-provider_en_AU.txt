@@ -1,0 +1,5 @@
+Hi {{givenName}}, it's Anna from Comparato.
+
+You were looking at private health cover with us recently. Is there something specific you want covered, or are you weighing up options?
+
+Reply 'stop' to opt out

@@ -1,6 +1,7 @@
 package com.enrola.salesagent.conversation;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 
 import java.time.Instant;
 import java.util.Locale;
@@ -27,6 +28,24 @@ class ConversationStarterTest {
 
 	@Autowired
 	ConversationStarter starter;
+
+	@Test
+	void startsAConversationWithTheOpener() {
+		StartResult result = starter.start(leadService.ingest("lead-john"));
+
+		assertThat(result.conversation().getMessages())
+				.extracting(Message::getSender, Message::getTemplateKey)
+				.containsExactly(tuple(Sender.AGENT, "opener-known-provider"));
+	}
+
+	@Test
+	void aDuplicateNumberGetsNoSecondOpener() {
+		Conversation johns = starter.start(leadService.ingest("lead-john")).conversation();
+
+		starter.start(leadService.ingest("lead-john-again"));
+
+		assertThat(johns.getMessages()).hasSize(1);
+	}
 
 	@Test
 	void startsAConversationPinnedToTheCurrentAgentVersionAndLocale() {

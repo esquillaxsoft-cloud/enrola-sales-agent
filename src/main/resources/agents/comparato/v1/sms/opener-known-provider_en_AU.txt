@@ -1,0 +1,5 @@
+Hi {{givenName}}, it's Anna from Comparato.
+
+We've been helping a lot of {{currentProvider}} members find better value lately. Are you looking to save money or improve your cover?
+
+Reply 'stop' to opt out

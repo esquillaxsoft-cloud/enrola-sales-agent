@@ -38,11 +38,13 @@ public class ConversationStarter {
 	}
 
 	private final ConversationRepository conversations;
+	private final Opener opener;
 	private final AgentProperties agent;
 	private final Clock clock;
 
-	ConversationStarter(ConversationRepository conversations, AgentProperties agent, Clock clock) {
+	ConversationStarter(ConversationRepository conversations, Opener opener, AgentProperties agent, Clock clock) {
 		this.conversations = conversations;
+		this.opener = opener;
 		this.agent = agent;
 		this.clock = clock;
 	}
@@ -58,6 +60,7 @@ public class ConversationStarter {
 			return new StartResult(open.get(), Outcome.SAME_NUMBER_OPEN);
 		}
 		Conversation conversation = new Conversation(lead, agent.version(), agent.defaultLocale(), clock.instant());
+		conversation.append(opener.compose(conversation, clock.instant()));
 		return new StartResult(conversations.save(conversation), Outcome.STARTED);
 	}
 
