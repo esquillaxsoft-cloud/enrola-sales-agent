@@ -54,7 +54,7 @@ class OpenAiAgentReplierTest {
 	void setUp() {
 		RestClient.Builder http = RestClient.builder();
 		server = MockRestServiceServer.bindTo(http).build();
-		var properties = new OpenAiProperties("sk-test", "gpt-6.1-sol", null, Duration.ofSeconds(5), 600);
+		var properties = new OpenAiProperties("sk-test", "gpt-6.1-sol", null, Duration.ofSeconds(5), 600, null);
 		replier = new OpenAiAgentReplier(http, properties,
 				PromptBuilderTestAccess.promptBuilder("comparato/v1", Clock.fixed(NOW, ZoneOffset.UTC)),
 				tools, JsonMapper.builder().build());

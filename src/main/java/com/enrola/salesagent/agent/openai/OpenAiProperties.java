@@ -10,9 +10,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @param baseUrl         the API root
  * @param timeout         how long to wait for one response
  * @param maxOutputTokens cap per turn; an SMS plus flags needs a few hundred at most
+ * @param moderationModel model for the (free) moderation endpoint
  */
 @ConfigurationProperties("openai")
-public record OpenAiProperties(String apiKey, String model, String baseUrl, Duration timeout, int maxOutputTokens) {
+public record OpenAiProperties(String apiKey, String model, String baseUrl, Duration timeout, int maxOutputTokens,
+		String moderationModel) {
 
 	static final String DEFAULT_MODEL = "gpt-6.1-sol";
 
@@ -22,6 +24,7 @@ public record OpenAiProperties(String apiKey, String model, String baseUrl, Dura
 		baseUrl = baseUrl == null || baseUrl.isBlank() ? "https://api.openai.com/v1" : baseUrl;
 		timeout = timeout == null ? Duration.ofSeconds(30) : timeout;
 		maxOutputTokens = maxOutputTokens <= 0 ? 600 : maxOutputTokens;
+		moderationModel = moderationModel == null || moderationModel.isBlank() ? "omni-moderation-latest" : moderationModel;
 	}
 
 	public boolean hasKey() {

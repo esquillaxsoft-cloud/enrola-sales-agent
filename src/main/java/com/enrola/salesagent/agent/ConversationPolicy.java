@@ -62,7 +62,7 @@ public class ConversationPolicy {
 		if (output.reply() == null || output.reply().isBlank()) {
 			return Optional.empty();
 		}
-		return Optional.of(Message.fromModel(output.reply().strip(), now));
+		return Optional.of(Message.fromModel(SmsText.plain(output.reply()).strip(), now));
 	}
 
 	/**
