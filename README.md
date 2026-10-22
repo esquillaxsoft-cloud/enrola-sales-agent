@@ -211,6 +211,9 @@ per language.
   (Spam Act), so it must be deterministic and must not cost a token.
 - **An opt-out covers the phone number.** If a number has ever opted out, no conversation starts
   for it and nothing is sent, whichever lead id it arrives under.
+- **Opting out is one-way in the prototype.** Messages after STOP are stored but never answered,
+  even "START" or "actually, I'd like that call". Re-subscribing is designed but deliberately not
+  built (§7).
 - **Objections are counted in code.** The model flags whether this message was an objection, and
   code keeps the count. "Try once more, then give up" doesn't rely on the model remembering.
 - **Goodbye loops are prevented in two layers.** After `BOOKED`, the agent only replies if the
@@ -295,9 +298,29 @@ per language.
 **Still open**
 - **A number that comes back after declining:** contact them again straight away, or wait some
   number of days? Assumed: a new form submission is fresh interest, so contact them again.
+- **A number that opted out submits the form again:** is that fresh consent to contact them?
+  Assumed no (blocked) until Comparato's compliance people confirm, since a wrong yes is a breach.
+- **Who owns STOP/START at the SMS provider:** if Enrola's platform already handles them, it should
+  tell the agent rather than the agent parsing keywords itself.
 - The designer said more example transcripts are coming, and those will likely raise more.
 
 ## 7. With more time
+
+### Potential feature: re-subscribing after an opt-out (designed, not built)
+A lead who texts STOP and later changes their mind is stuck today. The Spam Act allows consent to
+be given again, so revival should be possible, but only on clear, deliberate signals:
+1. **An opt-in keyword** (`START`, `UNSTOP`, `resubscribe`; a per-locale asset like the opt-out
+   list) takes the number off the suppression list, sets the conversation back to `ACTIVE`, and
+   sends a fixed confirmation ("You're back on. Happy to pick up where we left off - still keen on
+   that call?"). The opt-out record is kept, with a `resubscribed_at` timestamp, so both events
+   stay on file.
+2. **Anything else after STOP** gets one fixed, non-marketing reply, once ("You've opted out of
+   messages from Comparato. Reply START if you'd like to hear from us again."), then silence.
+3. **A new form submission** from an opted-out number stays blocked until Comparato confirms it
+   counts as consent (§6).
+
+Roughly: a keyword asset, two templates, one column, one state change and tests. Left out because
+it isn't needed to get Comparato live, and the compliance questions in §6 should be answered first.
 
 - **Prompt evaluation**: replay a library of real transcripts against a new prompt version and
   compare specific, checkable outcomes (booking rate, opt-out rate, messages to booking,
