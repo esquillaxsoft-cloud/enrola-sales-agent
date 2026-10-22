@@ -34,15 +34,27 @@
         <table class="table align-middle">
             <thead>
             <tr>
+                <th>Conversation</th>
                 <th>Lead</th>
                 <th>Phone</th>
                 <th>State</th>
                 <th>Current cover</th>
-                <th>Conversation</th>
             </tr>
             </thead>
             <tbody>
             <tr th:each="row : ${leads}">
+                <td>
+                    <th:block th:if="${row.conversation}">
+                        <a class="btn btn-sm btn-outline-primary"
+                           th:href="@{/conversations/{id}(id=${row.conversation.id})}"
+                           th:text="|Open #${row.conversation.id}|">Open #1</a>
+                        <span class="badge text-bg-secondary" th:text="${row.conversation.status}">ACTIVE</span>
+                        <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
+                            Same number as another lead
+                        </div>
+                    </th:block>
+                    <span th:unless="${row.conversation}" class="text-muted">None</span>
+                </td>
                 <td>
                     <span th:text="${row.lead.givenName}">John</span>
                     <div class="small text-muted" th:text="${row.lead.externalId}">lead-john</div>
@@ -53,17 +65,6 @@
                     <span th:text="${row.lead.currentProvider} ?: 'None'">HBF</span>
                     <div class="small text-muted" th:if="${row.lead.currentPremium}"
                          th:text="|${row.lead.currentPremium} a month|">$350-$450 a month</div>
-                </td>
-                <td>
-                    <th:block th:if="${row.conversation}">
-                        <a th:href="@{/conversations/{id}(id=${row.conversation.id})}"
-                           th:text="|#${row.conversation.id}|">#1</a>
-                        <span class="badge text-bg-secondary" th:text="${row.conversation.status}">ACTIVE</span>
-                        <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
-                            Same number as another lead
-                        </div>
-                    </th:block>
-                    <span th:unless="${row.conversation}" class="text-muted">None</span>
                 </td>
             </tr>
             </tbody>
