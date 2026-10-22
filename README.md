@@ -77,6 +77,41 @@ models together.
 - **Tone** matches the sample transcript: short, plain, a little blunt, Australian, no
   exclamation marks, no "I hope this finds you well".
 
+### Prompts and message templates: ready for translation, English only
+Everything the agent says or is told lives in **files, not Java strings**, laid out so a second
+language could be added later without code changes. Only `en_AU` will exist for this prototype;
+translation is *staged*, not delivered.
+
+```
+src/main/resources/agents/comparato/v1/       <- one versioned bundle per customer agent
+  system-prompt_en_AU.md                      <- LLM system prompt
+  knowledge_en_AU.md                          <- Comparato info pack
+  sms/opener-known-provider_en_AU.txt         <- user-facing SMS templates
+  sms/opener-no-provider_en_AU.txt
+  opt-out-keywords_en_AU.txt                  <- STOP / unsubscribe words are language-specific too
+```
+
+- **One loader for everything**, using the JDK's standard locale fallback (`en_AU` → `en` →
+  unsuffixed). A missing locale falls back to English instead of failing.
+- **Named placeholders** (`{{givenName}}`, `{{currentProvider}}`), not `MessageFormat`'s `{0}`.
+  Translators need to see what a placeholder means. `MessageFormat` also makes a single
+  apostrophe an escape character, a classic bug with copy like *"it's Anna"* and
+  *"Reply 'stop'"*. Rendering fails loudly on an unknown or missing variable.
+- **Locale is stored on the conversation** (default `en_AU`), along with the agent version, so a
+  conversation never changes language or prompt version halfway through, and every message can be
+  traced to the exact assets that produced it.
+- The **system prompt tells the model which language to reply in**, rather than relying on a
+  translated prompt alone. The info pack is customer-supplied content, so it's localised as a
+  file.
+- **Bundled versioning.** Templates are versioned with the prompt (`v1`), because changing the
+  opener changes the agent's behaviour as much as changing the prompt does. A new version means a
+  new folder, so v1 and v2 can be compared side by side.
+
+Not done: no translations, no language detection, no locale on the lead API, and the internal UI
+stays English. One known catch for later: SMS with non-GSM characters (most non-Latin scripts)
+are billed per 70 characters rather than 160, so the 320-character limit has a different cost
+per language.
+
 ### Ending conversations (state the platform can rely on)
 | Situation | Reply sent? | State |
 |---|---|---|
@@ -113,6 +148,7 @@ models together.
 - Rescheduling or cancelling an existing booking (the agent hands this to a human for now)
 - Quiet hours / contact-time rules (the platform schedules sends; noted as a risk)
 - Multi-customer configuration (see the CTO's "build for this customer first")
+- Translations. Assets are laid out per locale (see §3), but only `en_AU` ships
 - Authentication, deployment, production observability
 
 ## 5. Trade-offs I'm aware of
