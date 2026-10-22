@@ -11,6 +11,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.enrola.salesagent.config.AgentProperties;
+import com.enrola.salesagent.conversation.Booking;
 import com.enrola.salesagent.conversation.Conversation;
 import com.enrola.salesagent.conversation.ConversationRepository;
 import com.enrola.salesagent.conversation.EndReason;
@@ -46,15 +47,19 @@ public class TurnService {
 	public record TurnResult(Conversation conversation, Optional<Message> reply, boolean duplicate) {
 	}
 
-	/** Step 1's outcome: either the turn is already over, or the model is needed for this message. */
-	private record Prepared(TurnResult finished, Conversation conversation, Long inboundId) {
+	/**
+	 * Step 1's outcome: either the turn is already over, or the model is needed for this message.
+	 * Remembers the booking as it was, so step 3 can tell whether the model's tools booked a call.
+	 */
+	private record Prepared(TurnResult finished, Conversation conversation, Long inboundId, String bookingBefore) {
 
 		static Prepared finished(TurnResult result) {
-			return new Prepared(result, null, null);
+			return new Prepared(result, null, null, null);
 		}
 
 		static Prepared needsModel(Conversation conversation, Long inboundId) {
-			return new Prepared(null, conversation, inboundId);
+			Booking booking = conversation.getBooking();
+			return new Prepared(null, conversation, inboundId, booking == null ? null : booking.getEventId());
 		}
 
 	}
@@ -100,7 +105,7 @@ public class TurnService {
 			return prepared.finished();
 		}
 		AgentOutput output = replier.reply(prepared.conversation());
-		return tx.execute(status -> complete(conversationId, prepared.inboundId(), output));
+		return tx.execute(status -> complete(conversationId, prepared, output));
 	}
 
 	private Prepared prepare(Long conversationId, String platformMessageId, String body) {
@@ -123,13 +128,27 @@ public class TurnService {
 		return Prepared.needsModel(conversation, inbound.getId());
 	}
 
-	private TurnResult complete(Long conversationId, Long inboundId, AgentOutput output) {
+	private TurnResult complete(Long conversationId, Prepared prepared, AgentOutput output) {
+		Long inboundId = prepared.inboundId();
 		Conversation conversation = load(conversationId);
 		Message inbound = conversation.getMessages().stream()
 				.filter(m -> inboundId.equals(m.getId()))
 				.findFirst()
 				.orElseThrow();
 		inbound.recordAgentOutput(json.writeValueAsString(output));
+
+		// A booking or reschedule landed during the model call: confirm it with the template, whatever
+		// the model wrote, and even if a newer SMS arrived meanwhile (the call is booked either way).
+		Booking booking = conversation.getBooking();
+		if (booking != null && !booking.getEventId().equals(prepared.bookingBefore())) {
+			policy.applyFlagsOnly(conversation, output);
+			Optional<Message> sent = conversation.getStatus().isTerminal() || alreadyConfirmed(conversation)
+					? Optional.empty()
+					: Optional.of(policy.bookingConfirmation(conversation, clock.instant()));
+			sent.ifPresent(conversation::append);
+			conversations.flush();
+			return new TurnResult(conversation, sent, false);
+		}
 
 		boolean superseded = conversation.getMessages().stream()
 				.anyMatch(m -> m.getSender() == Sender.LEAD && m.getId() != null && m.getId() > inboundId);
@@ -165,6 +184,20 @@ public class TurnService {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Two overlapping turns can both see the same new booking; only the first confirms it. The
+	 * confirmation names the time and advisor, so an identical last message means it's been sent.
+	 */
+	private boolean alreadyConfirmed(Conversation conversation) {
+		Message confirmation = policy.bookingConfirmation(conversation, clock.instant());
+		List<Message> messages = conversation.getMessages();
+		return messages.reversed().stream()
+				.filter(m -> m.getSender() == Sender.AGENT)
+				.findFirst()
+				.map(last -> last.getBody().equals(confirmation.getBody()))
+				.orElse(false);
 	}
 
 	private Conversation load(Long conversationId) {

@@ -1,0 +1,1 @@
+Booked - you're in for {{when}}. {{advisorName}} from Comparato will call you on this number, and it should only take about 15 mins.

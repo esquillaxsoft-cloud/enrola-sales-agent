@@ -25,7 +25,7 @@ class AgentConfig {
 	private static final Logger log = LoggerFactory.getLogger(AgentConfig.class);
 
 	@Bean
-	AgentReplier agentReplier(OpenAiProperties openAi, PromptBuilder prompts, JsonMapper json) {
+	AgentReplier agentReplier(OpenAiProperties openAi, PromptBuilder prompts, BookingTools tools, JsonMapper json) {
 		if (!openAi.hasKey()) {
 			log.warn("OPENAI_API_KEY is not set: using the stub agent (canned replies)");
 			return new StubAgentReplier();
@@ -34,7 +34,7 @@ class AgentConfig {
 		var requests = new JdkClientHttpRequestFactory(
 				HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
 		requests.setReadTimeout(openAi.timeout());
-		return new OpenAiAgentReplier(RestClient.builder().requestFactory(requests), openAi, prompts, json);
+		return new OpenAiAgentReplier(RestClient.builder().requestFactory(requests), openAi, prompts, tools, json);
 	}
 
 }

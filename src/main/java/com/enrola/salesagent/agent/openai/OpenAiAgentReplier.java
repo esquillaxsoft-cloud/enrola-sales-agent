@@ -3,7 +3,9 @@ package com.enrola.salesagent.agent.openai;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -15,6 +17,7 @@ import org.springframework.web.client.RestClientException;
 import com.enrola.salesagent.agent.AgentOutput;
 import com.enrola.salesagent.agent.AgentReplier;
 import com.enrola.salesagent.agent.AgentUnavailableException;
+import com.enrola.salesagent.agent.BookingTools;
 import com.enrola.salesagent.agent.PromptBuilder;
 import com.enrola.salesagent.conversation.Conversation;
 
@@ -23,63 +26,103 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * One call to OpenAI's Responses API per turn: the conversation's system prompt as
- * {@code instructions}, the SMS transcript as {@code input}, and a strict JSON schema so the reply
- * always parses into {@link AgentOutput}.
+ * One turn against OpenAI's Responses API: the conversation's system prompt as
+ * {@code instructions}, the SMS transcript as {@code input}, the booking tools, and a strict JSON
+ * schema so the final reply always parses into {@link AgentOutput}.
+ *
+ * <p>If the model calls tools, they're run and their results sent back, round after round, until it
+ * answers (at most {@link #MAX_TOOL_ROUNDS}).
  *
  * <p>{@code store: false}: OpenAI keeps nothing. These are conversations about people's health,
- * and our database already holds the only copy we need (README §5).
+ * and our database already holds the only copy we need (DESIGN.md §5). So each round sends back
+ * the model's own output items, with its reasoning encrypted, instead of a response id.
  */
 public class OpenAiAgentReplier implements AgentReplier {
 
 	private static final Logger log = LoggerFactory.getLogger(OpenAiAgentReplier.class);
 
+	/** Find times, book: two rounds is normal. More than this means the model is going in circles. */
+	static final int MAX_TOOL_ROUNDS = 5;
+
 	private final RestClient http;
 	private final OpenAiProperties properties;
 	private final PromptBuilder prompts;
+	private final BookingTools tools;
 	private final JsonMapper json;
 	private final JsonNode outputSchema;
 
 	public OpenAiAgentReplier(RestClient.Builder http, OpenAiProperties properties, PromptBuilder prompts,
-			JsonMapper json) {
+			BookingTools tools, JsonMapper json) {
 		this.http = http.baseUrl(properties.baseUrl())
 				.defaultHeader("Authorization", "Bearer " + properties.apiKey())
 				.build();
 		this.properties = properties;
 		this.prompts = prompts;
+		this.tools = tools;
 		this.json = json;
 		this.outputSchema = loadSchema(json);
 	}
 
 	@Override
 	public AgentOutput reply(Conversation conversation) {
-		JsonNode response;
+		List<Object> input = new ArrayList<>(prompts.input(conversation));
+		for (int round = 1; round <= MAX_TOOL_ROUNDS; round++) {
+			JsonNode response = send(request(conversation, input));
+			logUsage(conversation, round, response);
+
+			List<JsonNode> calls = new ArrayList<>();
+			response.path("output").forEach(item -> {
+				if ("function_call".equals(item.path("type").asString())) {
+					calls.add(item);
+				}
+			});
+			if (calls.isEmpty()) {
+				return parse(response);
+			}
+			// Send back what the model produced (its reasoning and the calls), then each call's result.
+			response.path("output").forEach(input::add);
+			for (JsonNode call : calls) {
+				String result = tools.execute(call.path("name").asString(), call.path("arguments").asString(),
+						conversation.getId());
+				input.add(Map.of("type", "function_call_output", "call_id", call.path("call_id").asString(),
+						"output", result));
+			}
+		}
+		throw new AgentUnavailableException("Model made more than " + MAX_TOOL_ROUNDS + " rounds of tool calls");
+	}
+
+	private JsonNode send(Map<String, Object> request) {
 		try {
-			response = http.post()
+			JsonNode response = http.post()
 					.uri("/responses")
 					.contentType(MediaType.APPLICATION_JSON)
-					.body(request(conversation))
+					.body(request)
 					.retrieve()
 					.body(JsonNode.class);
+			if (response == null) {
+				throw new AgentUnavailableException("Empty response from OpenAI");
+			}
+			return response;
 		}
 		catch (RestClientException e) {
 			throw new AgentUnavailableException("OpenAI request failed: " + e.getMessage(), e);
 		}
-		logUsage(conversation, response);
-		return parse(response);
 	}
 
-	Map<String, Object> request(Conversation conversation) {
+	Map<String, Object> request(Conversation conversation, List<Object> input) {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("model", properties.model());
 		body.put("instructions", prompts.instructions(conversation));
-		body.put("input", prompts.input(conversation));
+		body.put("input", input);
+		body.put("tools", tools.definitions());
 		body.put("text", Map.of("format", Map.of(
 				"type", "json_schema",
 				"name", "agent_turn",
 				"schema", outputSchema,
 				"strict", true)));
 		body.put("store", false);
+		// With store=false, reasoning carried between tool rounds has to travel with the request.
+		body.put("include", List.of("reasoning.encrypted_content"));
 		body.put("max_output_tokens", properties.maxOutputTokens());
 		return body;
 	}
@@ -115,14 +158,11 @@ public class OpenAiAgentReplier implements AgentReplier {
 		throw new AgentUnavailableException("No message in OpenAI response");
 	}
 
-	/** Cost visibility: tokens per turn, including how much of the prompt was served from cache. */
-	private void logUsage(Conversation conversation, JsonNode response) {
-		if (response == null) {
-			return;
-		}
+	/** Cost visibility: tokens per call, including how much of the prompt was served from cache. */
+	private void logUsage(Conversation conversation, int round, JsonNode response) {
 		JsonNode usage = response.path("usage");
-		log.info("OpenAI turn: conversation={} model={} input={} (cached {}) output={}",
-				conversation.getId(), response.path("model").asString(),
+		log.info("OpenAI turn: conversation={} round={} model={} input={} (cached {}) output={}",
+				conversation.getId(), round, response.path("model").asString(),
 				usage.path("input_tokens").asInt(), usage.path("input_tokens_details").path("cached_tokens").asInt(),
 				usage.path("output_tokens").asInt());
 	}
