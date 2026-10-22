@@ -106,6 +106,16 @@ public class Conversation {
 		this.status = ConversationStatus.OPTED_OUT;
 	}
 
+	/** @return how many times the lead has now objected */
+	public int recordObjection() {
+		return ++objectionCount;
+	}
+
+	/** The lead turned the call down twice; the agent says goodbye and stops. */
+	public void decline() {
+		this.status = ConversationStatus.DECLINED;
+	}
+
 	public void end(EndReason reason) {
 		this.status = ConversationStatus.ENDED;
 		this.endReason = reason;

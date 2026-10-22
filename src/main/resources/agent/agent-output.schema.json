@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["reply", "stage", "objection", "unsubscribe", "abusive", "note"],
+  "properties": {
+    "reply": {
+      "type": ["string", "null"],
+      "description": "The SMS to send to the lead, at most 320 characters. null to send nothing, e.g. when the lead only says thanks after booking."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["ENGAGE", "PREFERENCE", "SUGGEST_CALL", "OFFER_TIMES", "BOOKED", "AFTER_BOOKING", "CLOSING"],
+      "description": "Where the conversation is after this reply."
+    },
+    "objection": {
+      "type": "boolean",
+      "description": "True if the lead's latest message pushes back on having a call (too busy, not interested, insurance is a rip-off)."
+    },
+    "unsubscribe": {
+      "type": "boolean",
+      "description": "True if the lead's latest message asks not to be contacted again, in any wording."
+    },
+    "abusive": {
+      "type": "boolean",
+      "description": "True if the lead's latest message is abusive or threatening."
+    },
+    "note": {
+      "type": "string",
+      "description": "One short line for the people reviewing this conversation: why you replied this way."
+    }
+  }
+}
