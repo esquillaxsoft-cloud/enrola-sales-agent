@@ -51,11 +51,12 @@ class ConversationPageTest {
 	}
 
 	@Test
-	void showsTheLeadAndAnEmptyTranscript() throws Exception {
+	void showsTheLeadAndTheOpener() throws Exception {
 		mvc.perform(get("/conversations/{id}", johnsConversation))
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("lead-john")))
-				.andExpect(content().string(containsString("No messages yet")));
+				.andExpect(content().string(containsString("helping a lot of HBF members")))
+				.andExpect(content().string(containsString("template opener-known-provider")));
 	}
 
 	@Test
@@ -64,9 +65,10 @@ class ConversationPageTest {
 				.andExpect(redirectedUrl("/conversations/" + johnsConversation));
 
 		Conversation conversation = conversations.findWithMessagesById(johnsConversation).orElseThrow();
-		assertThat(conversation.getMessages()).extracting(Message::getSender).containsExactly(Sender.LEAD, Sender.AGENT);
-		assertThat(conversation.getMessages().get(0).getBody()).isEqualTo("Save money");
-		assertThat(conversation.getMessages().get(1).getAgentOutput()).isNotBlank();
+		assertThat(conversation.getMessages()).extracting(Message::getSender)
+				.containsExactly(Sender.AGENT, Sender.LEAD, Sender.AGENT);
+		assertThat(conversation.getMessages().get(1).getBody()).isEqualTo("Save money");
+		assertThat(conversation.getMessages().get(2).getAgentOutput()).isNotBlank();
 
 		mvc.perform(get("/conversations/{id}", johnsConversation))
 				.andExpect(content().string(containsString("Save money")));
@@ -77,7 +79,8 @@ class ConversationPageTest {
 		mvc.perform(post("/conversations/{id}/messages", johnsConversation).param("body", "   "))
 				.andExpect(flash().attribute("error", containsString("1 to 1600")));
 
-		assertThat(conversations.findWithMessagesById(johnsConversation).orElseThrow().getMessages()).isEmpty();
+		assertThat(conversations.findWithMessagesById(johnsConversation).orElseThrow().getMessages())
+				.extracting(Message::getSender).containsExactly(Sender.AGENT);
 	}
 
 	@Test
@@ -90,7 +93,9 @@ class ConversationPageTest {
 		assertThat(conversations.findById(johnsConversation)).isEmpty();
 		Conversation fresh = conversations.findAll().getFirst();
 		assertThat(fresh.getLead().getExternalId()).isEqualTo("lead-john");
-		assertThat(conversations.findWithMessagesById(fresh.getId()).orElseThrow().getMessages()).isEmpty();
+		// Only the opener: the earlier exchange is gone.
+		assertThat(conversations.findWithMessagesById(fresh.getId()).orElseThrow().getMessages())
+				.extracting(Message::getTemplateKey).containsExactly("opener-known-provider");
 	}
 
 	@Test
