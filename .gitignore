@@ -1,0 +1,31 @@
+# Secrets
+.env
+*.env
+!.env.example
+
+# Build output
+target/
+build/
+.gradle/
+!.mvn/wrapper/maven-wrapper.jar
+
+# Local H2 database
+data/
+*.mv.db
+*.trace.db
+
+# IDEs / OS
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+.DS_Store
+Thumbs.db
+
+# Assessment brief (not mine to publish)
+*.pdf
+
+# Claude Code local settings
+.claude/settings.local.json
