@@ -30,5 +30,5 @@ Thumbs.db
 # Claude Code local settings
 .claude/settings.local.json
 
-# Eval results cache: model outputs keyed by model + prompt bundle + case (DESIGN.md section 8)
+# Eval results cache: model outputs keyed by model + prompt bundle + case (DESIGN.md section 6)
 .eval-cache/

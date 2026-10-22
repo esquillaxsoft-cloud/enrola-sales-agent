@@ -19,7 +19,7 @@ import com.enrola.salesagent.lead.Lead;
 /**
  * Builds what the model sees for one turn: the conversation's versioned system prompt with the
  * lead's details filled in, and the whole SMS transcript. Built fresh from our own records every
- * turn (no OpenAI-side threading; README §5).
+ * turn (no OpenAI-side threading; DESIGN.md §5).
  */
 @Component
 public class PromptBuilder {
