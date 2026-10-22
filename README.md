@@ -109,6 +109,14 @@ curl http://localhost:8080/api/conversations/1
 They use an in-memory database and the stub agent, so they never touch `./data/` and **never call
 OpenAI**, even with a key in `.env`. GitHub Actions runs them on Linux for every pull request.
 
+**Load test** (token-free, about 30 seconds): a week's 750 leads arriving at once, then a day's 150
+leads all mid-conversation together, with a fake model that takes 1-2 s per reply. It writes
+`target/load-report.md`. Results and what they mean are in [DESIGN.md](DESIGN.md#load-test-is-750-leads-a-week-a-problem).
+
+```bash
+./mvnw test -Pload
+```
+
 ## Starting clean and looking inside
 
 - **Start over:** stop the app and delete the `./data/` folder.

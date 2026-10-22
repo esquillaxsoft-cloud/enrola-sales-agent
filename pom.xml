@@ -17,6 +17,8 @@
 		<java.version>21</java.version>
 		<bootstrap.version>5.3.7</bootstrap.version>
 		<libphonenumber.version>9.0.32</libphonenumber.version>
+		<test.groups></test.groups>
+		<test.excludedGroups>load</test.excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -100,7 +102,27 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<!-- Slow, opt-in suites (e.g. the load test) are tagged and run only with their profile. -->
+					<groups>${test.groups}</groups>
+					<excludedGroups>${test.excludedGroups}</excludedGroups>
+				</configuration>
+			</plugin>
 		</plugins>
 	</build>
+
+	<profiles>
+		<!-- ./mvnw test -Pload : the token-free load test of a day's conversations and a week's ingestion -->
+		<profile>
+			<id>load</id>
+			<properties>
+				<test.groups>load</test.groups>
+				<test.excludedGroups></test.excludedGroups>
+			</properties>
+		</profile>
+	</profiles>
 
 </project>

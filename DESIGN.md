@@ -281,6 +281,48 @@ per language.
   morning risks losing them. It also removed a scheduler and a deferred-message state from the
   prototype. Worth revisiting if late-night replies turn out to hurt trust or opt-out rates.
 
+### Load test: is 750 leads a week a problem?
+`./mvnw test -Pload` runs the full app over real HTTP, with a fake model that waits 1-2 s per
+reply (like a real call, but spending no tokens) and a lead API that invents leads. Results on my
+Windows laptop (in-memory H2):
+
+| Scenario | Requests | Errors | p50 / p95 / p99 | Wall time |
+|---|---|---|---|---|
+| Cold start: first 50 requests at once | 50 | 0 | 1360 / 1385 / 1386 ms | n/a |
+| A week's leads (750) started at once, 50 in flight | 750 | 0 | 35 / 61 / 81 ms | 0.6 s |
+| A day's leads (150) all talking at once, 5-10 SMS each, replying instantly | 1,148 | 0 | 1580 / 2181 / 2446 ms | 17.1 s |
+
+Every SMS got exactly one reply, and none were lost or duplicated.
+
+**What it shows**
+- **Volume isn't the problem.** A whole week of leads starts in under a second. A real day is
+  about 1,000 turns spread over hours, roughly one every half a minute. The test pushed 67 turns a
+  second.
+- **Splitting the turn is what makes that possible.** A turn takes the model's time plus about
+  50-200 ms. The database pool has only 10 connections, but no connection is held during the model
+  call. If the call ran inside the transaction, 10 connections at about 1.5 s each would cap
+  throughput near 7 turns a second, and 150 conversations at once would queue for tens of seconds.
+- **Cold start costs about 1.4 s for the first burst.** That matters only straight after a deploy.
+
+**What would break first, in order**
+1. **OpenAI rate limits and outages,** not our code. A failed turn already returns `503` and
+   resumes on retry; production would add backoff, and alerting on failure rate.
+2. **Tomcat's 200 request threads,** each blocked for a 1-2 s model call. That's a ceiling of
+   roughly 100-130 turns a second per instance, far above Comparato's volume. Virtual threads
+   (`spring.threads.virtual.enabled`), or taking turns off a queue, would lift it.
+3. **H2 and one instance:** fine for the prototype, but production needs Postgres and two or more
+   instances. The optimistic lock already makes concurrent turns on one conversation safe.
+4. **The in-memory Calendly mock and its bookings,** which are lost on restart. Real Calendly has
+   its own rate limits to check.
+
+**Cost, from the real `gpt-6.1-sol` run:** about 2,000 input tokens a turn, ~95% served from the
+prompt cache, and about 85 output tokens. At the listed $2 / $10 per million (cached input is
+cheaper still), that's well under a cent a turn. Even if every lead replied 5-10 times, 750 leads
+a week is single-digit dollars a week. (Prices from third-party listings; check OpenAI's.)
+
+**What it doesn't measure:** real model latency variance, real network, Postgres, or many
+instances. It's a sanity check of our own code under Comparato's volume, not a capacity plan.
+
 ## 6. Questions for the agent designer / Comparato
 
 **Answered**
