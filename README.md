@@ -69,8 +69,9 @@ models together.
   (750 a week), it carries the opt-out text, and Comparato will likely want to approve it word
   for word. Variants depend on whether we know the current provider. Costs nothing and can't go
   wrong.
-- **The persona is "Anna from Comparato"**, as in the sample transcript. The agent admits it's an
-  AI assistant whenever it's asked, and never claims to be human.
+- **The persona is "Anna from Comparato"**, as in the sample transcript. The agent never
+  volunteers that it's an AI, but if a lead sincerely asks, it says so briefly and returns to the
+  booking. It never claims to be human (see §6).
 - **The agent doesn't give insurance advice.** Comparato operates under the PHII Code of Conduct.
   The agent can answer questions about Comparato itself (from the info pack) and about the call,
   but anything about which policy or cover is right gets deferred to the advisor. That's the
