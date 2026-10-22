@@ -6,6 +6,17 @@ To run it, see the [README](README.md).
 > I wrote this before writing any code (it started as the README) and updated it as decisions
 > changed. Each change, including the ones I reversed, is in the commit history.
 
+**Where it ended up:** the agent texts a lead from a templated opener, works through the
+designer's five steps with `gpt-6.1-sol`, and books, moves or cancels a call in a mock Calendly
+through tools. The rules that must hold (opt-out, objections, abuse, length, no reply loops) are
+enforced in code before or after the model, never left to the prompt. Every turn is recorded with
+its tools and cost, and shown next to the message in the UI. Delivery plan rows 1-16 are done
+(§2); the eval suite (row 17) is designed (§8) but not built.
+
+**Reading guide:** §2 for the architecture and how it was built, §3 for assumptions, §5 for
+trade-offs and the load test, §6 for how I'd measure quality and run a second customer, §9 for how
+I used AI.
+
 ---
 
 ## 1. What I'm building first, and why
@@ -29,14 +40,21 @@ deliverable is the smallest thing that can safely hold a real conversation with 
 ## 2. Architecture in one paragraph
 
 Spring Boot 4.1 (Java 21) with MVC, Thymeleaf and Bootstrap, matching Enrola's stack. An inbound SMS
-hits an endpoint that stands in for the Enrola platform. The service loads the conversation from
-the database, applies the deterministic pre-checks (opt-out keywords, conversation already
-ended), then makes **one** OpenAI Responses API call with a single versioned system prompt, the
-Comparato info pack, the lead's data and the full transcript. The model can call
-`get_available_slots`, `book_call`, `reschedule_call` and `cancel_call`, backed by a mocked
-Calendly client, and returns a
-**structured output** (reply text plus state flags). Code validates that output (length, state
-transitions), persists it, and returns it to the platform.
+hits an endpoint that stands in for the Enrola platform. A turn (`TurnService`) then runs in three
+steps, so no database connection is held while the model thinks:
+1. **Store and check, in a short transaction:** save the lead's SMS, then apply the hard rules in
+   code: conversation already ended, opt-out keyword, message cap.
+2. **Ask the model, with no transaction open:** OpenAI's free moderation endpoint first (abuse ends
+   the conversation with no model call), then the Responses API with the conversation's versioned
+   system prompt, the Comparato info pack, the lead's details and the full transcript
+   (`store: false`). The model can call `get_available_slots`, `book_call`, `reschedule_call` and
+   `cancel_call`, each run in its own short transaction against a mocked Calendly. It returns a
+   **structured output**: reply, stage, and the objection / unsubscribe / abusive flags. Code
+   checks the reply: 320 characters (one retry) and plain punctuation.
+3. **Apply and store, in a short transaction:** `ConversationPolicy` turns the flags into state
+   (objections counted in code, a fixed goodbye on the second), a booking made this turn is
+   confirmed from a template, and the whole turn (output, tool calls, tokens, time) is recorded on
+   the lead's message. The reply and the conversation state go back to the platform.
 
 No multi-agent orchestration and no agent framework. One prompt, structured output and tools, as
 the CTO suggested. The interesting engineering is in the seams around the model, not in chaining
@@ -52,6 +70,9 @@ The order is deliberate:
   output, so they don't depend on a prompt behaving.
 - **The model goes in in two steps,** plain structured output first and tool calling second,
   so each diff stays readable.
+
+Rows 1-16 all shipped as pull requests #1-#20. The extras: #3 added Linux CI, #5 and #15 design
+notes, #14 the load test, and #20 a prompt fix found by the scenarios. Row 17 wasn't built.
 
 | # | Commit | What's in it | How to check it |
 |---|---|---|---|
@@ -71,7 +92,7 @@ The order is deliberate:
 | 14 | **Structured output in the UI** | State panel next to each message: flags, status, tool calls, agent version | Visible on the conversation page |
 | 15 | **End-to-end scenarios** | Opt-in tests against the real model: books a call, objects twice, prompt injection, asks if it's an AI; code-based assertions on the structured output | `./mvnw test -Pscenarios` |
 | 16 | **Docs finish** | README (how to run) and this document: measuring quality at scale, what breaks at 750 leads a week, how I used AI | Read them |
-| 17 | **Eval suite (if time permits)** | Quality vs cost per model and prompt version, designed so evals stay cheap (§7) | `./mvnw test -Peval` writes a model-by-model report |
+| 17 | **Eval suite (if time permits)** | Quality vs cost per model and prompt version, designed so evals stay cheap (§8) | `./mvnw test -Peval` writes a model-by-model report |
 
 Milestones: **after 7** the platform contract is real with a stub agent. **After 12** the agent
 can book a call. Everything after that hardens and proves it.
@@ -120,7 +141,7 @@ can book a call. Everything after that hardens and proves it.
   - **Opt-out applies to the phone number, not the conversation** (see below).
   - When an earlier conversation has finished: never recontact after an opt-out, and don't start
     a new one while a call is booked. After a decline, a new form submission counts as fresh
-    interest and starts a new conversation (open question, §6).
+    interest and starts a new conversation (open question, §7).
 
 ### Conversation design
 - **The opening message is a template, not LLM-generated.** It's the one message every lead gets
@@ -139,8 +160,8 @@ can book a call. Everything after that hardens and proves it.
   is Sydney time, and so on). The lead's state is the only time-zone signal we have.
 - **The booking confirmation is rendered by code from a template, not written by the model.** It
   names the advisor who'll call and states the time in a fixed format, in the lead's local time
-  (e.g. `Tue 28 Jul 2026, 9:30 am`), which iOS and Android recognise and offer to add to the
-  calendar. Because the model doesn't write it, the format can't drift. There are no links: the
+  (e.g. `Thursday 29 October 2026 at 12:00 pm`), which iOS and Android recognise and offer to add
+  to the calendar. Because the model doesn't write it, the format can't drift. There are no links: the
   advisor calls the lead's phone.
 - **Offered slots can go stale.** A lead might pick "12" two days after we offered it.
   `book_call` re-checks availability, and if the slot has gone the agent offers the nearest
@@ -205,8 +226,8 @@ per language.
 | Booking cancelled by lead | Yes, one rebook attempt | `goalMet=false`, status `ACTIVE` |
 | `STOP` / `unsubscribe` / `opt out` keyword | No; the platform handles any compliance confirmation | `unsubscribed=true`, status `OPTED_OUT` |
 | "Please stop texting me" (no keyword) | No | Model flags `unsubscribed=true`, status `OPTED_OUT` |
-| Second objection | Yes, a polite close ("I'll leave it there...") | status `DECLINED` |
-| Abusive lead | No | status `ENDED`, reason `ABUSIVE` |
+| Second objection | Yes, a fixed goodbye from a template ("I'll leave it there...") | status `DECLINED` |
+| Abusive lead (caught by moderation, or the model's flag) | No | status `ENDED`, reason `ABUSIVE` |
 
 - **Opt-out keywords are handled in code before the model is called.** It's a legal requirement
   (Spam Act), so it must be deterministic and must not cost a token.
@@ -214,7 +235,7 @@ per language.
   for it and nothing is sent, whichever lead id it arrives under.
 - **Opting out is one-way in the prototype.** Messages after STOP are stored but never answered,
   even "START" or "actually, I'd like that call". Re-subscribing is designed but deliberately not
-  built (§7).
+  built (§8).
 - **Objections are counted in code.** The model flags whether this message was an objection, and
   code keeps the count. "Try once more, then give up" doesn't rely on the model remembering.
 - **Goodbye loops are prevented in two layers.** After `BOOKED`, the agent only replies if the
@@ -238,7 +259,7 @@ per language.
 **Out of scope (deliberately)**
 - Real SMS, real Calendly, real lead API, which the platform already owns
 - Follow-up nudges for leads who never reply (high-value, but it's a platform scheduling concern;
-  see §7)
+  see §8)
 - Multi-customer configuration (see the CTO's "build for this customer first")
 - Merging duplicate lead records (lead management belongs to the platform)
 - Translations. Assets are laid out per locale (see §3), but only `en_AU` ships
@@ -270,10 +291,19 @@ per language.
     matter, the API can return the reasoning in encrypted form for us to store and send back.
 - **H2 file database** instead of Postgres. Pull-and-run with no Docker, and state survives a
   restart. JPA keeps the move to Postgres a configuration change.
-- **Synchronous request handling.** Fine for a prototype. At 750 leads a week the volume is tiny
-  (peak a few requests a minute), but in production I'd still take inbound messages off a queue so
-  a slow OpenAI call or retry never blocks the platform's webhook. Two SMS arriving seconds apart
-  should be batched into one turn. The prototype serialises turns per conversation instead.
+- **Synchronous requests, but no transaction held across the model call.** The platform's
+  webhook waits for the turn (2-15 s). Splitting the turn (§2) keeps the database free while it
+  waits. If a newer SMS arrives mid-turn, the older reply is dropped and the newer turn answers
+  both (opt-out and abuse flags still apply), and two turns can't both commit (optimistic lock).
+  In production I'd still take inbound messages off a queue, so a slow or failing OpenAI call never
+  ties up the platform's webhook.
+- **Plain HTTP to OpenAI, not the SDK.** One `RestClient` call per round, so the exact request
+  (strict schema, `store: false`, tools, encrypted reasoning) is visible in our code. The cost is
+  keeping up with the API ourselves.
+- **Tool results aren't kept between turns, only the SMS text.** When a lead picks "the first
+  one", the model looks the times up again before booking. That re-checks the slot is still free,
+  but costs a round: booking turns take about 15 s. Keeping the last offered slots on the
+  conversation would cut that (§8).
 - **A templated opener** gives up personalisation on the first message in exchange for
   predictability and approval-ability.
 - **Replying at any hour, not only 8am–8pm.** I first planned an 8am–8pm reply window, with
@@ -324,7 +354,40 @@ a week is single-digit dollars a week. (Prices from third-party listings; check 
 **What it doesn't measure:** real model latency variance, real network, Postgres, or many
 instances. It's a sanity check of our own code under Comparato's volume, not a capacity plan.
 
-## 6. Questions for the agent designer / Comparato
+## 6. Beyond the prototype
+
+### Measuring conversation quality at scale
+At 750 leads a week nobody reads every conversation, so quality has to come from numbers on the
+records already kept (each turn's output, tools, tokens and the conversation's end state), plus a
+little human reading. **Outcomes per lead contacted:** booking rate, opt-out rate, decline rate,
+messages and hours to a booking, and cost per booking. **Hygiene on every live turn,** checked by
+the same code as the scenario tests: retries for length, moderation ends, message-cap ends, tool
+errors, and replies before a booking that don't ask anything. **A weekly read** of about 20
+conversations, weighted to declines, opt-outs and health-event mentions. **For a new prompt
+version:** each conversation pins its version, so once `v2` passes the scenarios (and the eval
+suite), half of new leads can get it and the two be compared on the same outcomes. **The metric
+I'd stop trusting first is the booking rate.** A pushier agent raises it while no-shows, opt-outs
+and complaints rise with it, and it says nothing about whether the call happened. It only means
+something next to Comparato's show rate for those calls and the opt-out rate.
+
+### A second customer on the same engine
+The seams are mostly there, and the Comparato-specific parts are known:
+- **Agent bundle per customer.** Prompts and templates already live under
+  `agents/<customer>/<version>`. The customer (and its current bundle) moves from config
+  (`AgentProperties`) onto the lead and the conversation.
+- **Lead fields.** `currentProvider` and `currentPremium` are Comparato's custom fields, wired into
+  `Lead`, the choice of opener and `PromptBuilder`. They'd become a per-customer map of custom
+  fields that the bundle's templates and prompt refer to by name.
+- **Calendar.** A `CalendlyClient` per customer (their account and event type), with their
+  advisors' hours and time zone instead of Melbourne's.
+- **Country.** Phone parsing (default region `AU`), `AuState` time zones and the Spam Act opt-out
+  words are Australian.
+- **Suppression list.** Consent is given to a customer, so `opt_out` needs a customer id: a STOP to
+  Comparato shouldn't unsubscribe the person from someone else.
+- **Rules stay as code.** The objection count, message cap and moderation categories are shared;
+  each customer gets its own numbers in config.
+
+## 7. Questions for the agent designer / Comparato
 
 **Answered**
 - *Persona?* "Anna from Comparato".
@@ -347,9 +410,9 @@ instances. It's a sanity check of our own code under Comparato's volume, not a c
   tell the agent rather than the agent parsing keywords itself.
 - The designer said more example transcripts are coming, and those will likely raise more.
 
-## 7. With more time
+## 8. With more time
 
-### Planned last, if time permits: a cost-aware eval suite (delivery plan row 17)
+### Planned last, if time permits: a cost-aware eval suite (delivery plan row 17, not built)
 The CTO wants to move towards evals but worries their cost will outpace their value. So the
 suite is designed for cents per run, and **you only pay again for what changed**. It's mainly a
 demonstration of measuring quality against cost across OpenAI models and prompt versions, not a
@@ -391,10 +454,25 @@ be given again, so revival should be possible, but only on clear, deliberate sig
 2. **Anything else after STOP** gets one fixed, non-marketing reply, once ("You've opted out of
    messages from Comparato. Reply START if you'd like to hear from us again."), then silence.
 3. **A new form submission** from an opted-out number stays blocked until Comparato confirms it
-   counts as consent (§6).
+   counts as consent (§7).
 
 Roughly: a keyword asset, two templates, one column, one state change and tests. Left out because
-it isn't needed to get Comparato live, and the compliance questions in §6 should be answered first.
+it isn't needed to get Comparato live, and the compliance questions in §7 should be answered first.
+
+### Other next steps
+- **Faster booking turns:** keep the last offered slots on the conversation, so "the first one"
+  books in one round instead of re-fetching (§5).
+- **Virtual threads and a queue for turns;** backoff on OpenAI rate limits; alerts on turn
+  failures.
+- **Postgres** in production and in CI (Testcontainers), instead of H2 in PostgreSQL mode.
+
+### What I'd delete
+- **The stub agent's objection phrases.** They existed only to try the objection flow before the
+  model was wired in.
+- **Reset clearing the opt-out.** A testing aid that must never ship: one line in
+  `ConversationStarter.restart`.
+- **`TurnViews`' handling of the old turn-record format,** once the prototype database is thrown
+  away.
 
 - **Prompt evaluation**: replay a library of real transcripts against a new prompt version and
   compare specific, checkable outcomes (booking rate, opt-out rate, messages to booking,
@@ -405,6 +483,39 @@ it isn't needed to get Comparato live, and the compliance questions in §6 shoul
 - **Queue-based processing**, retries with idempotency on booking, and per-conversation cost
   tracking.
 
-## 8. How I used AI
+## 9. How I used AI
 
-_To be written as I go._
+> _Draft: to review, correct and put in my own words before submitting. The two cost figures need
+> filling in._
+
+**What I used:** Claude Code (in the Claude desktop app) as a pair for the whole build. OpenAI only
+for what the product does: the agent's replies and moderation.
+
+**How:** I kept the decisions and had the AI do most of the typing. The brief became this document
+first, then a 16-row delivery plan, and each row went in as its own pull request (20 in all) that I
+read, ran locally and merged before the next one started. The product calls were mine, and several
+show as reversals in the history:
+- an 8am-8pm reply window, added and then dropped (§5)
+- AI disclosure: briefly considered not admitting it, then kept as the brief says
+- the Comparato info pack: the AI paraphrased it, and I had it replaced verbatim
+- openers aimed at gold hospital and extras, after rereading the designer's note on who the leads
+  are
+- STOP doesn't cancel a booked call; re-subscribing deferred; the eval suite scoped to "if time
+  permits"
+- UI details from using it myself: Enter to send, a typing indicator, status colours
+
+**What it got wrong, and what caught it:**
+- a paraphrased info pack: caught reviewing the prompt
+- two docs commits pushed after their PR had merged: spotted later and cherry-picked
+- template files that would read differently on Windows and Linux: caught from git's line-ending
+  warning
+- a test database silently swapped for a different H2 mode: caught by a failing test
+- a session id appearing in redirect URLs: caught in the browser
+- a test that read the clock twice and failed only on Linux: caught by CI
+
+That's why the tests, the Linux CI, the browser checks and the scenarios exist.
+
+**What it cost:** OpenAI for the product during development: about [fill in] (a scenario run is
+about 4 cents; the load test uses none). Claude Code: [fill in from my usage page]. Worth it: the
+plan, PR and review loop covered far more of the brief than I'd have managed by hand in the time,
+and the decisions stayed mine.

@@ -10,7 +10,11 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 > mock Calendly, and the hard rules hold: opt-out, objections, abuse (moderation plus the model's
 > flag), the message cap, and the 320-character limit (one retry). Each lead message on the
 > conversation page expands to show the agent's read of it: stage, flags, tool calls, tokens and
-> time. End-to-end scenarios against the real model pass (`./mvnw test -Pscenarios`).
+> time. End-to-end scenarios against the real model pass (`./mvnw test -Pscenarios`). Not built:
+> the eval suite, designed in [DESIGN.md §8](DESIGN.md#8-with-more-time).
+>
+> **Short on time?** Run it, seed John, and book a call (see [Try it](#try-it)). Then open DESIGN.md
+> §2 (how it works), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
 
 ## Run it
 
