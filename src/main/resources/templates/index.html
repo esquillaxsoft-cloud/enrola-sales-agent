@@ -5,20 +5,68 @@
 <nav th:replace="~{fragments/layout :: navbar}"></nav>
 
 <main class="container">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-3">
         <div>
             <h1 class="h3 mb-1">Leads</h1>
             <p class="text-muted mb-0">Each lead gets one SMS conversation with the agent.
                 You play the lead.</p>
         </div>
+        <form th:action="@{/leads}" method="post" class="d-flex gap-2">
+            <select name="externalId" class="form-select" aria-label="Sample lead">
+                <option th:each="s : ${samples}" th:value="${s.externalId}"
+                        th:text="|${s.givenName} · ${s.state} · ${s.phone} (${s.externalId})|">John</option>
+            </select>
+            <button type="submit" class="btn btn-primary text-nowrap">Seed lead</button>
+        </form>
     </div>
 
-    <!-- Served as Spring Boot's welcome page until the lead controller supplies ${leads}. -->
+    <div th:if="${notice}" class="alert alert-info" th:text="${notice}">Started conversation.</div>
+    <div th:if="${error}" class="alert alert-danger" th:text="${error}">Something went wrong.</div>
+
     <div th:if="${#lists.isEmpty(leads)}" class="card text-center">
         <div class="card-body py-5">
             <h2 class="h5">No leads yet</h2>
             <p class="text-muted mb-0">Seed a sample lead to start a conversation.</p>
         </div>
+    </div>
+
+    <div th:unless="${#lists.isEmpty(leads)}" class="table-responsive">
+        <table class="table align-middle">
+            <thead>
+            <tr>
+                <th>Lead</th>
+                <th>Phone</th>
+                <th>State</th>
+                <th>Current cover</th>
+                <th>Conversation</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="row : ${leads}">
+                <td>
+                    <span th:text="${row.lead.givenName}">John</span>
+                    <div class="small text-muted" th:text="${row.lead.externalId}">lead-john</div>
+                </td>
+                <td th:text="${row.lead.phone}">+61457099876</td>
+                <td th:text="${row.lead.state}">WA</td>
+                <td>
+                    <span th:text="${row.lead.currentProvider} ?: 'None'">HBF</span>
+                    <div class="small text-muted" th:if="${row.lead.currentPremium}"
+                         th:text="|${row.lead.currentPremium} a month|">$350-$450 a month</div>
+                </td>
+                <td>
+                    <th:block th:if="${row.conversation}">
+                        <span th:text="|#${row.conversation.id}|">#1</span>
+                        <span class="badge text-bg-secondary" th:text="${row.conversation.status}">ACTIVE</span>
+                        <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
+                            Same number as another lead
+                        </div>
+                    </th:block>
+                    <span th:unless="${row.conversation}" class="text-muted">None</span>
+                </td>
+            </tr>
+            </tbody>
+        </table>
     </div>
 </main>
 </body>
