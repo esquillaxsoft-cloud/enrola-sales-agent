@@ -94,6 +94,9 @@ class ScenarioTest {
 		assertThat(toolsCalled(conversation)).as("booked through the tool, not by claiming it").contains("book_call");
 		assertThat(modelReplies(conversation)).as("until booked, every reply asks something")
 				.allSatisfy(reply -> assertThat(reply.strip()).endsWith("?"));
+		assertThat(modelReplies(conversation)).as("offered times name each day once")
+				.allSatisfy(reply -> WEEKDAYS.forEach(day -> assertThat(occurrences(reply, day)).as(day + " in: " + reply)
+						.isLessThanOrEqualTo(1)));
 		assertSmsRules(conversation);
 	}
 
@@ -237,6 +240,13 @@ class ScenarioTest {
 			assertThat(reply).as("no exclamation marks: " + reply).doesNotContain("!");
 			assertThat(reply).as("plain punctuation: " + reply).isASCII();
 		});
+	}
+
+	static final List<String> WEEKDAYS = List.of("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
+			"Sunday");
+
+	private static int occurrences(String text, String word) {
+		return text.split(word, -1).length - 1;
 	}
 
 	private static String oneLine(String text) {
