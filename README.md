@@ -43,6 +43,39 @@ No multi-agent orchestration and no agent framework. One prompt, structured outp
 the CTO suggested. The interesting engineering is in the seams around the model, not in chaining
 models together.
 
+### Delivery plan
+Each row is a small commit (occasionally two) that builds, runs and can be reviewed on its own.
+The order is deliberate:
+- **A walking skeleton comes first.** The whole loop (lead → conversation → reply → stored
+  state → UI) works end to end with a stub in place of the model, so the seams exist before any
+  prompt work.
+- **Guardrails and state transitions come before the LLM.** They're tested with fake model
+  output, so they don't depend on a prompt behaving.
+- **The model goes in in two steps,** plain structured output first and tool calling second,
+  so each diff stays readable.
+
+| # | Commit | What's in it | How to check it |
+|---|---|---|---|
+| 1 | **Scaffold** | Spring Boot 3, Java 21, Maven wrapper, Thymeleaf, Bootstrap (WebJar, so it runs offline), H2, `.env` loading | `./mvnw spring-boot:run` starts, and the context-load test passes |
+| 2 | **UI landing page** | Shared layout and a leads page with an empty state | The page renders |
+| 3 | **Persistence design** | `Lead`, `Conversation` (status, agent version, locale, objection count, booking), `Message`; Flyway migration so the schema is reviewable SQL | Repository tests: save and reload a conversation with messages |
+| 4 | **Mock lead API and seeding** | `LeadClient` interface and stub with the brief's sample leads (John, Jane, Lauren); "Seed lead" button | Seeded leads appear on the landing page |
+| 5 | **Conversation controller and page** | Transcript view, "send as lead" form, reset. A stub `AgentReplier` returns a canned reply | You can hold a (dumb) conversation in the browser |
+| 6 | **Localised template loader** | Locale-fallback asset loader, `{{named}}` renderer, opener templates; starting a conversation sends the templated opener | Unit tests: fallback, missing variable fails, apostrophes survive |
+| 7 | **Platform API** | `POST /api/leads/{id}/conversation` and `POST /api/conversations/{id}/inbound`, returning the reply and state; the UI calls the same service | **Walking skeleton done.** An HTTP test covers both endpoints |
+| 8 | **Deterministic guardrails** | Opt-out keywords, no reply after a terminal state, message cap | Unit tests per rule; the stub agent is never called on `STOP` |
+| 9 | **Mock Calendly and slot logic** | Availability generator, 7-day query limit, book/cancel, reschedule as book-then-cancel, state → time zone, injected `Clock` | Unit tests: slot selection, time zones, stale slot, reschedule order |
+| 10 | **Agent output contract and state transitions** | The structured output record and JSON schema; code that applies it to the conversation (goal met, unsubscribed, objection count, ended) | Unit tests with hand-written model outputs, no LLM |
+| 11 | **OpenAI Responses API, no tools** | Client, `system-prompt_en_AU.md` v1, knowledge pack, model from config; replaces the stub | A real conversation in the UI, short of booking |
+| 12 | **Tool calling** | Tool loop for availability, book, reschedule and cancel; code-rendered booking confirmation | A real conversation books a call |
+| 13 | **Output validation and moderation** | 320-character check with one retry; moderation on inbound messages ends abusive conversations | Unit tests on the validator; a manual abuse check |
+| 14 | **Structured output in the UI** | State panel next to each message: flags, status, tool calls, agent version | Visible on the conversation page |
+| 15 | **End-to-end scenarios** | Opt-in tests against the real model: books a call, objects twice, prompt injection, asks if it's an AI; code-based assertions on the structured output | `./mvnw test -Pscenarios` |
+| 16 | **README finish** | How to run, measuring quality at scale, what breaks at 750 leads a week, how I used AI | Read it |
+
+Milestones: **after 7** the platform contract is real with a stub agent. **After 12** the agent
+can book a call. Everything after that hardens and proves it.
+
 ## 3. Assumptions
 
 ### Platform and integration
