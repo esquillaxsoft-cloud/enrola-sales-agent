@@ -11,6 +11,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import com.enrola.salesagent.agent.openai.OpenAiAgentReplier;
+import com.enrola.salesagent.agent.openai.OpenAiModerator;
 import com.enrola.salesagent.agent.openai.OpenAiProperties;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -31,10 +32,19 @@ class AgentConfig {
 			return new StubAgentReplier();
 		}
 		log.info("Agent: OpenAI {}", openAi.model());
+		return new OpenAiAgentReplier(http(openAi), openAi, prompts, tools, json);
+	}
+
+	@Bean
+	Moderator moderator(OpenAiProperties openAi) {
+		return openAi.hasKey() ? new OpenAiModerator(http(openAi), openAi) : Moderator.NONE;
+	}
+
+	private static RestClient.Builder http(OpenAiProperties openAi) {
 		var requests = new JdkClientHttpRequestFactory(
 				HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
 		requests.setReadTimeout(openAi.timeout());
-		return new OpenAiAgentReplier(RestClient.builder().requestFactory(requests), openAi, prompts, tools, json);
+		return RestClient.builder().requestFactory(requests);
 	}
 
 }

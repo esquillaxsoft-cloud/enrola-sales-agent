@@ -65,7 +65,16 @@ public class OpenAiAgentReplier implements AgentReplier {
 
 	@Override
 	public AgentOutput reply(Conversation conversation) {
+		return reply(conversation, null);
+	}
+
+	@Override
+	public AgentOutput reply(Conversation conversation, String correction) {
 		List<Object> input = new ArrayList<>(prompts.input(conversation));
+		if (correction != null) {
+			// A note from our code, not from the lead, after the transcript.
+			input.add(Map.of("role", "developer", "content", correction));
+		}
 		for (int round = 1; round <= MAX_TOOL_ROUNDS; round++) {
 			JsonNode response = send(request(conversation, input));
 			logUsage(conversation, round, response);

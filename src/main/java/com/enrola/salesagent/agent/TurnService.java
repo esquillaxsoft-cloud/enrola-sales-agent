@@ -2,6 +2,7 @@ package com.enrola.salesagent.agent;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
@@ -51,21 +52,26 @@ public class TurnService {
 	 * Step 1's outcome: either the turn is already over, or the model is needed for this message.
 	 * Remembers the booking as it was, so step 3 can tell whether the model's tools booked a call.
 	 */
-	private record Prepared(TurnResult finished, Conversation conversation, Long inboundId, String bookingBefore) {
+	private record Prepared(TurnResult finished, Conversation conversation, Message inbound, String bookingBefore) {
 
 		static Prepared finished(TurnResult result) {
 			return new Prepared(result, null, null, null);
 		}
 
-		static Prepared needsModel(Conversation conversation, Long inboundId) {
+		static Prepared needsModel(Conversation conversation, Message inbound) {
 			Booking booking = conversation.getBooking();
-			return new Prepared(null, conversation, inboundId, booking == null ? null : booking.getEventId());
+			return new Prepared(null, conversation, inbound, booking == null ? null : booking.getEventId());
+		}
+
+		Long inboundId() {
+			return inbound.getId();
 		}
 
 	}
 
 	private final ConversationRepository conversations;
 	private final AgentReplier replier;
+	private final Moderator moderator;
 	private final ConversationPolicy policy;
 	private final OptOutKeywords optOutKeywords;
 	private final OptOuts optOuts;
@@ -74,11 +80,12 @@ public class TurnService {
 	private final TransactionTemplate tx;
 	private final Clock clock;
 
-	TurnService(ConversationRepository conversations, AgentReplier replier, ConversationPolicy policy,
+	TurnService(ConversationRepository conversations, AgentReplier replier, Moderator moderator, ConversationPolicy policy,
 			OptOutKeywords optOutKeywords, OptOuts optOuts, AgentProperties agent, JsonMapper json,
 			PlatformTransactionManager transactions, Clock clock) {
 		this.conversations = conversations;
 		this.replier = replier;
+		this.moderator = moderator;
 		this.policy = policy;
 		this.optOutKeywords = optOutKeywords;
 		this.optOuts = optOuts;
@@ -104,8 +111,46 @@ public class TurnService {
 		if (prepared.finished() != null) {
 			return prepared.finished();
 		}
+
+		// Free, and quicker than the model: abuse ends the conversation before the model is asked.
+		List<String> abuse = moderator.abusiveCategories(prepared.inbound().getBody());
+		if (!abuse.isEmpty()) {
+			return tx.execute(status -> endForAbuse(conversationId, prepared, abuse));
+		}
+
 		AgentOutput output = replier.reply(prepared.conversation());
-		return tx.execute(status -> complete(conversationId, prepared, output));
+		if (SmsText.tooLong(output.reply()) && !bookingChanged(conversationId, prepared)) {
+			int length = SmsText.plain(output.reply()).strip().length();
+			output = replier.reply(prepared.conversation(), ("Your reply was %d characters. An SMS reply must be at most %d "
+					+ "characters: write it again, shorter.").formatted(length, SmsText.MAX_LENGTH));
+			if (SmsText.tooLong(output.reply())) {
+				// Never send a cut-off SMS; a retry of this inbound message resumes the turn.
+				throw new AgentUnavailableException("Reply still over " + SmsText.MAX_LENGTH + " characters after a retry");
+			}
+		}
+		AgentOutput finalOutput = output;
+		return tx.execute(status -> complete(conversationId, prepared, finalOutput));
+	}
+
+	private TurnResult endForAbuse(Long conversationId, Prepared prepared, List<String> categories) {
+		Conversation conversation = load(conversationId);
+		inboundIn(conversation, prepared.inboundId())
+				.recordAgentOutput(json.writeValueAsString(Map.of("moderation", Map.of("flagged", categories))));
+		if (!conversation.getStatus().isTerminal()) {
+			conversation.end(EndReason.ABUSIVE);
+		}
+		conversations.flush();
+		return new TurnResult(conversation, Optional.empty(), false);
+	}
+
+	/** Did the model's tools book or move a call during this turn? Then the template replaces its reply. */
+	private boolean bookingChanged(Long conversationId, Prepared prepared) {
+		Booking now = tx.execute(status -> load(conversationId).getBooking());
+		return now != null && !now.getEventId().equals(prepared.bookingBefore());
+	}
+
+	private static Message inboundIn(Conversation conversation, Long inboundId) {
+		return conversation.getMessages().stream().filter(m -> inboundId.equals(m.getId())).findFirst().orElseThrow();
 	}
 
 	private Prepared prepare(Long conversationId, String platformMessageId, String body) {
@@ -125,16 +170,13 @@ public class TurnService {
 			return Prepared.finished(new TurnResult(conversation, Optional.empty(), false));
 		}
 		conversations.flush(); // assigns the inbound message's id, used to find it again in step 3
-		return Prepared.needsModel(conversation, inbound.getId());
+		return Prepared.needsModel(conversation, inbound);
 	}
 
 	private TurnResult complete(Long conversationId, Prepared prepared, AgentOutput output) {
 		Long inboundId = prepared.inboundId();
 		Conversation conversation = load(conversationId);
-		Message inbound = conversation.getMessages().stream()
-				.filter(m -> inboundId.equals(m.getId()))
-				.findFirst()
-				.orElseThrow();
+		Message inbound = inboundIn(conversation, inboundId);
 		inbound.recordAgentOutput(json.writeValueAsString(output));
 
 		// A booking or reschedule landed during the model call: confirm it with the template, whatever
