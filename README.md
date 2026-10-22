@@ -10,8 +10,8 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 > mock Calendly, and the hard rules hold: opt-out, objections, abuse (moderation plus the model's
 > flag), the message cap, and the 320-character limit (one retry). Each lead message on the
 > conversation page expands to show the agent's read of it: stage, flags, tool calls, tokens and
-> time. End-to-end scenarios against the real model pass (`./mvnw test -Pscenarios`). Not built:
-> the eval suite, designed in [DESIGN.md §8](DESIGN.md#8-with-more-time).
+> time. End-to-end scenarios against the real model pass (`./mvnw test -Pscenarios`), and an eval
+> suite compares quality against cost per model (`./mvnw test -Peval`, results in `evals/results/`).
 >
 > **Short on time?** Run it, seed John, and book a call (see [Try it](#try-it)). Then open DESIGN.md
 > §2 (how it works), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
@@ -125,6 +125,17 @@ soft opt-out), checked in code one behaviour at a time. Transcripts and token co
 
 ```bash
 ./mvnw test -Pscenarios
+```
+
+**Evals: quality against cost per model** (needs the key): 11 one-turn cases in
+`src/test/resources/evals/cases/`, checked in code, run against several OpenAI models. Model outputs
+are cached in `.eval-cache/`, so a rerun with nothing changed costs $0, and a run stops at a budget
+(default $1). Writes `target/eval-report.md`; add `-Deval.record=true` to keep it in
+`evals/results/`. Choose models and budget with `-Deval.models=...` and `-Deval.budget=...`.
+Results and what they mean are in [DESIGN.md](DESIGN.md#evals-quality-against-cost-per-model-delivery-plan-row-17).
+
+```bash
+./mvnw test -Peval
 ```
 
 **Load test** (token-free, about 30 seconds): a week's 750 leads arriving at once, then a day's 150
