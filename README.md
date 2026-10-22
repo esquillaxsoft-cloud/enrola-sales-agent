@@ -59,11 +59,11 @@ The order is deliberate:
 | 1 | **Scaffold** | Spring Boot 4.1, Java 21, Maven wrapper, Thymeleaf, Bootstrap (WebJar, so it runs offline), H2, `.env` loading | `./mvnw spring-boot:run` starts, and the context-load test passes |
 | 2 | **UI landing page** | Shared layout and a leads page with an empty state | The page renders |
 | 3 | **Persistence design** | `Lead`, `Conversation` (status, agent version, locale, objection count, booking), `Message`; Flyway migration so the schema is reviewable SQL | Repository tests: save and reload a conversation with messages |
-| 4 | **Mock lead API and seeding** | `LeadClient` interface and stub with the brief's sample leads (John, Jane, Lauren); "Seed lead" button | Seeded leads appear on the landing page |
+| 4 | **Mock lead API and seeding** | `LeadClient` interface and stub with the brief's sample leads (John, Jane, Lauren); "Seed lead" button; phone numbers normalised to international format and indexed; one open conversation per phone number | Seeded leads appear on the landing page; unit tests: phone formats normalise alike, a duplicate number reuses the open conversation |
 | 5 | **Conversation controller and page** | Transcript view, "send as lead" form, reset. A stub `AgentReplier` returns a canned reply | You can hold a (dumb) conversation in the browser |
 | 6 | **Localised template loader** | Locale-fallback asset loader, `{{named}}` renderer, opener templates; starting a conversation sends the templated opener | Unit tests: fallback, missing variable fails, apostrophes survive |
 | 7 | **Platform API** | `POST /api/leads/{id}/conversation` and `POST /api/conversations/{id}/inbound`, returning the reply and state; the UI calls the same service | **Walking skeleton done.** An HTTP test covers both endpoints |
-| 8 | **Deterministic guardrails** | Opt-out keywords, no reply after a terminal state, message cap | Unit tests per rule; the stub agent is never called on `STOP` |
+| 8 | **Deterministic guardrails** | Opt-out keywords, opt-out applied to the phone number, no reply after a terminal state, message cap | Unit tests per rule; the stub agent is never called on `STOP`; an opted-out number gets no conversation under a new lead id |
 | 9 | **Mock Calendly and slot logic** | Availability generator, 7-day query limit, book/cancel, reschedule as book-then-cancel, state → time zone, injected `Clock` | Unit tests: slot selection, time zones, stale slot, reschedule order |
 | 10 | **Agent output contract and state transitions** | The structured output record and JSON schema; code that applies it to the conversation (goal met, unsubscribed, objection count, ended) | Unit tests with hand-written model outputs, no LLM |
 | 11 | **OpenAI Responses API, no tools** | Client, `system-prompt_en_AU.md` v1, knowledge pack, model from config; replaces the stub | A real conversation in the UI, short of booking |
@@ -103,6 +103,18 @@ can book a call. Everything after that hardens and proves it.
 - Booking needs name, phone, email and a start time, all from the lead record. I assume email is
   present. If it isn't, booking still goes ahead with phone only, because the advisor calls by
   phone anyway.
+- **The same person can arrive as two leads.** Someone fills in Comparato's form twice, or
+  Comparato resends them: two lead ids, one phone number. Merging duplicate lead records is
+  lead management, which belongs to Enrola's platform. The agent still protects the person:
+  - Phone numbers are stored in one standard international format (`+61457099876`), so
+    `0457 099 876` and `+61 457 099 876` match.
+  - **One open conversation per phone number.** If a conversation for that number hasn't ended,
+    a new lead doesn't start another one; the existing conversation is returned instead. This
+    avoids two "Anna"s texting one person, and leaves inbound SMS unambiguous to route.
+  - **Opt-out applies to the phone number, not the conversation** (see below).
+  - When an earlier conversation has finished: never recontact after an opt-out, and don't start
+    a new one while a call is booked. After a decline, a new form submission counts as fresh
+    interest and starts a new conversation (open question, §6).
 
 ### Conversation design
 - **The opening message is a template, not LLM-generated.** It's the one message every lead gets
@@ -192,6 +204,8 @@ per language.
 
 - **Opt-out keywords are handled in code before the model is called.** It's a legal requirement
   (Spam Act), so it must be deterministic and must not cost a token.
+- **An opt-out covers the phone number.** If a number has ever opted out, no conversation starts
+  for it and nothing is sent, whichever lead id it arrives under.
 - **Objections are counted in code.** The model flags whether this message was an objection, and
   code keeps the count. "Try once more, then give up" doesn't rely on the model remembering.
 - **Goodbye loops are prevented in two layers.** After `BOOKED`, the agent only replies if the
@@ -205,7 +219,9 @@ per language.
 **In scope**
 - Agent turn: prompt file, structured output, tool calls, state persistence
 - Mock lead API and mock Calendly (availability, booking, cancelling)
-- Agent-led rescheduling and cancellation after a booking- Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
+- Agent-led rescheduling and cancellation after a booking
+- Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
+- Duplicate-lead protection by phone number: one open conversation per number, opt-out per number
 - Moderation: OpenAI's moderation endpoint on inbound messages, used to detect abuse
 - Minimal web UI: seed leads, play the lead, view structured output, reset
 - Unit tests plus a small set of opt-in end-to-end scenarios against the real model
@@ -215,6 +231,7 @@ per language.
 - Follow-up nudges for leads who never reply (high-value, but it's a platform scheduling concern;
   see §7)
 - Multi-customer configuration (see the CTO's "build for this customer first")
+- Merging duplicate lead records (lead management belongs to the platform)
 - Translations. Assets are laid out per locale (see §3), but only `en_AU` ships
 - Authentication, deployment, production observability
 
@@ -269,8 +286,9 @@ per language.
 - *AI disclosure?* As the brief says: if the lead asks, the agent admits it's an AI.
 
 **Still open**
-- None right now. The designer said more example transcripts are coming, and those will likely
-  raise new ones.
+- **A number that comes back after declining:** contact them again straight away, or wait some
+  number of days? Assumed: a new form submission is fresh interest, so contact them again.
+- The designer said more example transcripts are coming, and those will likely raise more.
 
 ## 7. With more time
 
