@@ -224,10 +224,24 @@ per language.
   The designer's five steps are guidance for the prompt, not states in code. Real leads skip steps
   ("just call me Tuesday") and a rigid state machine fights that. The cost is less predictability,
   so the invariants that *must* hold are enforced in code.
-- **Full transcript sent on every turn** instead of OpenAI's `previous_response_id` threading.
-  We already store the conversation, SMS conversations are short (~10 turns), and owning the
-  context means turns can be replayed against a new prompt version for evaluation. Cost grows
-  with conversation length, which is fine at this length.
+- **Full transcript sent on every turn, with `store=false`**, instead of OpenAI's
+  `previous_response_id` threading. Our database is the only copy of the conversation:
+  - **Privacy.** Threading requires OpenAI to store every response. These are conversations
+    about people's health and insurance, which counts as sensitive information under the
+    Australian Privacy Act. Keeping one copy that we control is easier to justify, and it means a
+    customer that needs OpenAI's zero-data-retention option can still use the product.
+  - **Conversations outlive OpenAI's storage.** Stored responses expire (30 days by default), but
+    a lead can text to reschedule weeks after booking.
+  - **Not every message comes from the model.** The opener, opt-out handling and the booking
+    confirmation are produced by code, so OpenAI's thread would have gaps we'd keep patching.
+  - **Evaluation runs the same code as production.** Testing a new prompt version means replaying
+    stored transcripts through the same context-building code that live turns use.
+  - **It costs the same.** Threading doesn't make earlier turns free: they're still billed as
+    input tokens. Prompt caching works either way, helped by the system prompt and info pack being
+    the same at the start of every call.
+  - **What we give up:** a larger request each turn (negligible for SMS), and, with a reasoning
+    model, the model's reasoning isn't carried between turns automatically. If that turns out to
+    matter, the API can return the reasoning in encrypted form for us to store and send back.
 - **H2 file database** instead of Postgres. Pull-and-run with no Docker, and state survives a
   restart. JPA keeps the move to Postgres a configuration change.
 - **Synchronous request handling.** Fine for a prototype. At 750 leads a week the volume is tiny
