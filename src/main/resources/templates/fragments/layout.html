@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<!-- Shared fragments. Pages include them with th:replace rather than using a layout dialect,
+     so there is no extra dependency and each page reads top to bottom. -->
+
+<head th:fragment="head(title)">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title th:text="${title} + ' · Comparato agent'">Comparato agent</title>
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+</head>
+
+<body>
+
+<nav th:fragment="navbar" class="navbar navbar-dark bg-dark mb-4">
+    <div class="container">
+        <a class="navbar-brand" th:href="@{/}">Comparato SMS agent</a>
+        <span class="navbar-text small">Enrola prototype</span>
+    </div>
+</nav>
+
+</body>
+</html>

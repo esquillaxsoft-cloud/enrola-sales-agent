@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head th:replace="~{fragments/layout :: head('Leads')}"></head>
+<body>
+<nav th:replace="~{fragments/layout :: navbar}"></nav>
+
+<main class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h1 class="h3 mb-1">Leads</h1>
+            <p class="text-muted mb-0">Each lead gets one SMS conversation with the agent.
+                You play the lead.</p>
+        </div>
+    </div>
+
+    <!-- Served as Spring Boot's welcome page until the lead controller supplies ${leads}. -->
+    <div th:if="${#lists.isEmpty(leads)}" class="card text-center">
+        <div class="card-body py-5">
+            <h2 class="h5">No leads yet</h2>
+            <p class="text-muted mb-0">Seed a sample lead to start a conversation.</p>
+        </div>
+    </div>
+</main>
+</body>
+</html>
