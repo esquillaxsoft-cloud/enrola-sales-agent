@@ -50,9 +50,10 @@ class ConversationRepositoryTest {
 	void conversationRoundTripsWithMessagesInOrder() {
 		Conversation conversation = new Conversation(lauren, "comparato/v1", Locale.forLanguageTag("en-AU"), T0);
 		conversation.append(Message.fromTemplate("opener-known-provider", "Hi Lauren, it's Anna from Comparato.", T0));
-		conversation.append(Message.fromLead("All of the above", T0.plusSeconds(60)));
-		conversation.append(Message.fromModel("Fair enough - a lot of people want both.", "{\"goalMet\":false}",
-				T0.plusSeconds(65)));
+		Message inbound = Message.fromLead("All of the above", T0.plusSeconds(60));
+		inbound.recordAgentOutput("{\"objection\":false}");
+		conversation.append(inbound);
+		conversation.append(Message.fromModel("Fair enough - a lot of people want both.", T0.plusSeconds(65)));
 		Long id = conversations.saveAndFlush(conversation).getId();
 		em.clear();
 
@@ -69,8 +70,8 @@ class ConversationRepositoryTest {
 				.extracting(Message::getSender, Message::getTemplateKey, Message::getAgentOutput)
 				.containsExactly(
 						tuple(Sender.AGENT, "opener-known-provider", null),
-						tuple(Sender.LEAD, null, null),
-						tuple(Sender.AGENT, null, "{\"goalMet\":false}"));
+						tuple(Sender.LEAD, null, "{\"objection\":false}"),
+						tuple(Sender.AGENT, null, null));
 	}
 
 	@Test

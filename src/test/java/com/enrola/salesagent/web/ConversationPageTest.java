@@ -68,7 +68,8 @@ class ConversationPageTest {
 		assertThat(conversation.getMessages()).extracting(Message::getSender)
 				.containsExactly(Sender.AGENT, Sender.LEAD, Sender.AGENT);
 		assertThat(conversation.getMessages().get(1).getBody()).isEqualTo("Save money");
-		assertThat(conversation.getMessages().get(2).getAgentOutput()).isNotBlank();
+		// The model's output for the turn sits on the lead message that started it.
+		assertThat(conversation.getMessages().get(1).getAgentOutput()).contains("\"stage\":\"ENGAGE\"");
 
 		mvc.perform(get("/conversations/{id}", johnsConversation))
 				.andExpect(content().string(containsString("Save money")));

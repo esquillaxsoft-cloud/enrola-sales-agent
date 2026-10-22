@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import tools.jackson.databind.json.JsonMapper;
+
 import com.enrola.salesagent.config.AgentProperties;
 import com.enrola.salesagent.conversation.Conversation;
 import com.enrola.salesagent.conversation.ConversationRepository;
@@ -18,8 +20,9 @@ import com.enrola.salesagent.conversation.OptOuts;
 import com.enrola.salesagent.conversation.Sender;
 
 /**
- * One turn: a lead's SMS comes in, the hard rules decide whether the agent may reply, the agent
- * replies, and everything is stored with the conversation.
+ * One turn: a lead's SMS comes in, the hard rules decide whether the agent may answer, the agent
+ * reports on the turn ({@link AgentOutput}), the {@link ConversationPolicy} applies that report,
+ * and everything is stored with the conversation.
  *
  * <p>For now this is one transaction around the agent call. That's fine with a stub, but a model
  * call takes seconds, and holding a database connection that long doesn't scale. When the model
@@ -39,18 +42,22 @@ public class TurnService {
 
 	private final ConversationRepository conversations;
 	private final AgentReplier replier;
+	private final ConversationPolicy policy;
 	private final OptOutKeywords optOutKeywords;
 	private final OptOuts optOuts;
 	private final AgentProperties agent;
+	private final JsonMapper json;
 	private final Clock clock;
 
-	TurnService(ConversationRepository conversations, AgentReplier replier, OptOutKeywords optOutKeywords,
-			OptOuts optOuts, AgentProperties agent, Clock clock) {
+	TurnService(ConversationRepository conversations, AgentReplier replier, ConversationPolicy policy,
+			OptOutKeywords optOutKeywords, OptOuts optOuts, AgentProperties agent, JsonMapper json, Clock clock) {
 		this.conversations = conversations;
 		this.replier = replier;
+		this.policy = policy;
 		this.optOutKeywords = optOutKeywords;
 		this.optOuts = optOuts;
 		this.agent = agent;
+		this.json = json;
 		this.clock = clock;
 	}
 
@@ -78,16 +85,18 @@ public class TurnService {
 
 		String text = body.strip();
 		// Always stored, even when the agent won't answer: it's the lead's message and our record.
-		conversation.append(Message.fromLead(platformMessageId, text, clock.instant()));
+		Message inbound = Message.fromLead(platformMessageId, text, clock.instant());
+		conversation.append(inbound);
 
 		if (!mayReply(conversation, text)) {
 			return new TurnResult(conversation, Optional.empty(), false);
 		}
 
-		AgentReply reply = replier.reply(conversation);
-		Message sent = Message.fromModel(reply.body(), reply.output(), clock.instant());
-		conversation.append(sent);
-		return new TurnResult(conversation, Optional.of(sent), false);
+		AgentOutput output = replier.reply(conversation);
+		inbound.recordAgentOutput(json.writeValueAsString(output));
+		Optional<Message> sent = policy.apply(conversation, output, clock.instant());
+		sent.ifPresent(conversation::append);
+		return new TurnResult(conversation, sent, false);
 	}
 
 	/**

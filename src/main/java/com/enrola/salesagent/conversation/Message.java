@@ -35,7 +35,10 @@ public class Message {
 	/** Set when code rendered the message from a template, e.g. "opener-known-provider". */
 	private String templateKey;
 
-	/** The model's structured output (JSON) for the turn that produced this message. */
+	/**
+	 * On a lead message: the model's structured output (JSON) for the turn this message started,
+	 * kept even when the agent decided not to reply.
+	 */
 	private String agentOutput;
 
 	/** The platform's id for an inbound SMS, used to ignore webhook retries. */
@@ -48,11 +51,10 @@ public class Message {
 		// for JPA
 	}
 
-	private Message(Sender sender, String body, String templateKey, String agentOutput, Instant createdAt) {
+	private Message(Sender sender, String body, String templateKey, Instant createdAt) {
 		this.sender = sender;
 		this.body = body;
 		this.templateKey = templateKey;
-		this.agentOutput = agentOutput;
 		this.createdAt = createdAt;
 	}
 
@@ -62,17 +64,26 @@ public class Message {
 
 	/** @param platformMessageId the platform's id for this SMS, or null when there isn't one */
 	public static Message fromLead(String platformMessageId, String body, Instant at) {
-		Message message = new Message(Sender.LEAD, body, null, null, at);
+		Message message = new Message(Sender.LEAD, body, null, at);
 		message.platformMessageId = platformMessageId;
 		return message;
 	}
 
 	public static Message fromTemplate(String templateKey, String body, Instant at) {
-		return new Message(Sender.AGENT, body, templateKey, null, at);
+		return new Message(Sender.AGENT, body, templateKey, at);
 	}
 
-	public static Message fromModel(String body, String agentOutput, Instant at) {
-		return new Message(Sender.AGENT, body, null, agentOutput, at);
+	/** An SMS the model wrote. Its reasoning is on the lead message that started the turn. */
+	public static Message fromModel(String body, Instant at) {
+		return new Message(Sender.AGENT, body, null, at);
+	}
+
+	/** Records the model's structured output for the turn this lead message started. */
+	public void recordAgentOutput(String json) {
+		if (sender != Sender.LEAD) {
+			throw new IllegalStateException("Agent output belongs on the lead message that started the turn");
+		}
+		this.agentOutput = json;
 	}
 
 	void attachTo(Conversation conversation) {
