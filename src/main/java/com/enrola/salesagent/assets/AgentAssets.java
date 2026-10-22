@@ -70,10 +70,13 @@ public class AgentAssets {
 				.toList();
 	}
 
-	private static String read(Resource resource) {
+	static String read(Resource resource) {
 		try (var in = resource.getInputStream()) {
-			// Files end with a newline; an SMS shouldn't.
-			return new String(in.readAllBytes(), StandardCharsets.UTF_8).strip();
+			return new String(in.readAllBytes(), StandardCharsets.UTF_8)
+					// Git may check these files out with CRLF on Windows; an SMS must be identical on every OS.
+					.replace("\r\n", "\n")
+					// Files end with a newline; an SMS shouldn't.
+					.strip();
 		}
 		catch (IOException e) {
 			throw new UncheckedIOException(e);

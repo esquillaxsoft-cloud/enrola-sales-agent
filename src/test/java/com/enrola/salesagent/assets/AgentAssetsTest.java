@@ -3,9 +3,11 @@ package com.enrola.salesagent.assets;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ByteArrayResource;
 
 import com.enrola.salesagent.config.AgentProperties;
 
@@ -40,6 +42,13 @@ class AgentAssetsTest {
 				"agents/test/v1/farewell_en_AU.txt",
 				"agents/test/v1/farewell_en.txt",
 				"agents/test/v1/farewell.txt");
+	}
+
+	@Test
+	void windowsLineEndingsAreNormalisedSoTheSmsIsTheSameOnEveryOs() {
+		var crlf = new ByteArrayResource("Hi {{givenName}}.\r\n\r\nReply 'stop' to opt out\r\n".getBytes(StandardCharsets.UTF_8));
+
+		assertThat(AgentAssets.read(crlf)).isEqualTo("Hi {{givenName}}.\n\nReply 'stop' to opt out");
 	}
 
 	@Test
