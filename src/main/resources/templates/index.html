@@ -50,7 +50,7 @@
                            th:with="status=${row.conversation.status.name()}"
                            th:classappend="${status == 'ACTIVE'} ? 'btn-warning' : (${status == 'BOOKED'} ? 'btn-success' : 'btn-secondary')"
                            th:href="@{/conversations/{id}(id=${row.conversation.id})}"
-                           th:text="|Open #${row.conversation.id}|">Open #1</a>
+                           th:aria-label="|View ${row.lead.givenName}'s conversation|">VIEW</a>
                         <span class="small text-muted ms-1" th:text="${row.conversation.status}">ACTIVE</span>
                         <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
                             Same number as another lead
