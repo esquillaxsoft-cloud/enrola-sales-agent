@@ -33,6 +33,13 @@
                         <dt class="col-5">Provider</dt><dd class="col-7" th:text="${lead.currentProvider} ?: 'None'">HBF</dd>
                         <dt class="col-5">Premium</dt><dd class="col-7" th:text="${lead.currentPremium} ?: 'Unknown'">$350-$450</dd>
                     </dl>
+                    <h2 class="h6 mt-3">Call</h2>
+                    <dl class="row mb-0" th:if="${conversation.booking}">
+                        <dt class="col-5">When</dt>
+                        <dd class="col-7" th:text="${#temporals.format(conversation.booking.startTime.atZone(zone), 'EEE d MMM, h:mm a')}">Mon 27 Jul, 12:00 pm</dd>
+                        <dt class="col-5">Advisor</dt><dd class="col-7" th:text="${conversation.booking.advisorName}">Sam Nguyen</dd>
+                    </dl>
+                    <p class="text-muted mb-0" th:unless="${conversation.booking}">Not booked</p>
                     <h2 class="h6 mt-3">Agent</h2>
                     <dl class="row mb-0">
                         <dt class="col-5">Version</dt><dd class="col-7" th:text="${conversation.agentVersion}">comparato/v1</dd>

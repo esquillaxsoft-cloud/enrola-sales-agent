@@ -55,15 +55,17 @@ public class ConversationStarter {
 	private final LeadService leadService;
 	private final Opener opener;
 	private final OptOuts optOuts;
+	private final BookingService bookings;
 	private final AgentProperties agent;
 	private final Clock clock;
 
 	ConversationStarter(ConversationRepository conversations, LeadService leadService, Opener opener,
-			OptOuts optOuts, AgentProperties agent, Clock clock) {
+			OptOuts optOuts, BookingService bookings, AgentProperties agent, Clock clock) {
 		this.conversations = conversations;
 		this.leadService = leadService;
 		this.opener = opener;
 		this.optOuts = optOuts;
+		this.bookings = bookings;
 		this.agent = agent;
 		this.clock = clock;
 	}
@@ -102,15 +104,17 @@ public class ConversationStarter {
 
 	/**
 	 * Testing aid for the UI: throw a conversation away and start the lead again from scratch,
-	 * on the current agent version. Also forgets the number's opt-out, so an opt-out scenario can
-	 * be replayed; production would never do that. (Once bookings exist, this must also cancel
-	 * the booking.)
+	 * on the current agent version. Cancels any booked call, and forgets the number's opt-out so
+	 * an opt-out scenario can be replayed; production would never do that.
 	 */
 	@Transactional
 	public Conversation restart(Long conversationId) {
 		Conversation old = conversations.findById(conversationId)
 				.orElseThrow(() -> new NoSuchElementException("No conversation " + conversationId));
 		Lead lead = old.getLead();
+		if (old.getBooking() != null) {
+			bookings.cancel(old);
+		}
 		optOuts.forgetForTesting(lead.getPhone());
 		conversations.delete(old);
 		// Hibernate runs inserts before deletes at flush, which would trip the one-conversation-per-lead

@@ -289,6 +289,8 @@ per language.
 - *Reply hours?* Any time the lead messages (see §5).
 - *Advisor availability?* One Calendly event type pooling all advisors (round robin).
 - *AI disclosure?* As the brief says: if the lead asks, the agent admits it's an AI.
+- *Does opting out cancel a booked call?* No. STOP stops SMS only; the call the lead booked
+  stands, and the platform sees `goalMet: true, unsubscribed: true`.
 
 **Still open**
 - **A number that comes back after declining:** contact them again straight away, or wait some
