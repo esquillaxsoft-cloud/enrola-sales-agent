@@ -51,7 +51,7 @@
 
         <div class="col-lg-8 order-lg-1">
             <div class="card">
-                <div class="card-body d-flex flex-column gap-3">
+                <div id="transcript" class="card-body d-flex flex-column gap-3">
                     <p th:if="${#lists.isEmpty(conversation.messages)}" class="text-muted text-center my-4">
                         No messages yet. Reply as the lead to start.
                     </p>
@@ -73,16 +73,64 @@
                     </div>
                 </div>
                 <div class="card-footer">
-                    <form th:action="@{/conversations/{id}/messages(id=${conversation.id})}" method="post" class="d-flex gap-2">
-                        <textarea name="body" class="form-control" rows="2" required
+                    <form id="reply-form" th:action="@{/conversations/{id}/messages(id=${conversation.id})}" method="post"
+                          class="d-flex gap-2" th:data-agent-replies="${!conversation.status.terminal}">
+                        <textarea id="reply-body" name="body" class="form-control" rows="2" required autofocus
                                   th:attr="maxlength=${maxLength}"
                                   th:placeholder="|Reply as ${lead.givenName}|"></textarea>
-                        <button type="submit" class="btn btn-primary align-self-end">Send</button>
+                        <button id="reply-send" type="submit" class="btn btn-primary align-self-end">Send</button>
                     </form>
+                    <div class="form-text">Enter to send, Shift+Enter for a new line.</div>
                 </div>
             </div>
         </div>
     </div>
 </main>
+
+<!-- The SMS the lead "sends" appears straight away, with the agent typing, while the server waits
+     on the model; the page then reloads with the real transcript. Prototype UI only. -->
+<template id="pending-lead">
+    <div class="align-self-end text-end" style="max-width: 80%">
+        <div class="rounded-3 px-3 py-2 text-bg-primary opacity-75" style="white-space: pre-wrap"></div>
+        <div class="small text-muted mt-1">Sending...</div>
+    </div>
+</template>
+<template id="pending-agent">
+    <div class="align-self-start" style="max-width: 80%" role="status" aria-label="Agent is typing">
+        <div class="rounded-3 px-3 py-2 bg-body-secondary typing"><span></span><span></span><span></span></div>
+        <div class="small text-muted mt-1">Agent is typing</div>
+    </div>
+</template>
+<script>
+    (() => {
+        const form = document.getElementById('reply-form');
+        const body = document.getElementById('reply-body');
+        const transcript = document.getElementById('transcript');
+
+        // Enter sends, like a phone; Shift+Enter still adds a new line.
+        body.addEventListener('keydown', event => {
+            if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+                event.preventDefault();
+                if (body.value.trim()) form.requestSubmit();
+            }
+        });
+
+        form.addEventListener('submit', () => {
+            const pending = document.getElementById('pending-lead').content.cloneNode(true);
+            pending.querySelector('.text-bg-primary').textContent = body.value.trim();
+            transcript.querySelector('p.text-muted')?.remove();
+            transcript.append(pending);
+            if (form.dataset.agentReplies === 'true') {
+                transcript.append(document.getElementById('pending-agent').content.cloneNode(true));
+            }
+            transcript.lastElementChild.scrollIntoView({ block: 'nearest' });
+            // Read-only rather than disabled, so the textarea's value is still submitted.
+            body.readOnly = true;
+            document.getElementById('reply-send').disabled = true;
+        });
+
+        transcript.lastElementChild?.scrollIntoView({ block: 'nearest' });
+    })();
+</script>
 </body>
 </html>
