@@ -1,0 +1,17 @@
+# A lead message that is exactly one of these, ignoring case and punctuation, opts the lead out.
+# This is checked in code before the model sees the message: opting out is a legal requirement
+# (Spam Act), so it must be deterministic and cost nothing.
+#
+# Softer requests ("pls don't text me again") are left to the model, which flags unsubscribed.
+# "cancel" is deliberately absent: in this conversation it means cancelling a booked call.
+stop
+stop all
+stopall
+unsubscribe
+opt out
+optout
+end
+quit
+remove me
+stop texting me
+stop messaging me

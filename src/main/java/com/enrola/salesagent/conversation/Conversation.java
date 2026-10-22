@@ -92,9 +92,28 @@ public class Conversation {
 		this.status = ConversationStatus.BOOKED;
 	}
 
-	/** Reported to the platform with every turn; derived so it can't disagree with the status. */
+	/** Use {@link OptOuts#optOut}, which also records the number on the suppression list. */
+	void optOut() {
+		this.status = ConversationStatus.OPTED_OUT;
+	}
+
+	public void end(EndReason reason) {
+		this.status = ConversationStatus.ENDED;
+		this.endReason = reason;
+	}
+
+	/** Every SMS the agent has sent, the opener included. */
+	public long agentMessageCount() {
+		return messages.stream().filter(message -> message.getSender() == Sender.AGENT).count();
+	}
+
+	/**
+	 * Reported to the platform with every turn. A call is booked, whatever happened after: a lead
+	 * who books and then texts STOP still has the call, so this follows the booking, not the
+	 * status.
+	 */
 	public boolean isGoalMet() {
-		return status == ConversationStatus.BOOKED;
+		return booking != null;
 	}
 
 	/** Reported to the platform with every turn; derived so it can't disagree with the status. */
