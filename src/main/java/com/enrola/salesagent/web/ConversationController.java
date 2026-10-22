@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.enrola.salesagent.agent.AgentUnavailableException;
 import com.enrola.salesagent.agent.TurnService;
 import com.enrola.salesagent.conversation.Conversation;
 import com.enrola.salesagent.conversation.ConversationRepository;
@@ -52,7 +53,13 @@ class ConversationController {
 			redirect.addFlashAttribute("error", "Message must be 1 to " + MAX_LEAD_MESSAGE + " characters.");
 		}
 		else {
-			turns.handleInbound(id, body);
+			try {
+				turns.handleInbound(id, body);
+			}
+			catch (AgentUnavailableException e) {
+				redirect.addFlashAttribute("error", "The agent didn't reply (" + e.getMessage()
+						+ "). Your message was saved; send another to try again.");
+			}
 		}
 		return "redirect:/conversations/" + id;
 	}

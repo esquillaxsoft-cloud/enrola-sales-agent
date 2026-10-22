@@ -7,9 +7,8 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import tools.jackson.databind.json.JsonMapper;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.enrola.salesagent.config.AgentProperties;
 import com.enrola.salesagent.conversation.Conversation;
@@ -19,15 +18,22 @@ import com.enrola.salesagent.conversation.Message;
 import com.enrola.salesagent.conversation.OptOuts;
 import com.enrola.salesagent.conversation.Sender;
 
+import tools.jackson.databind.json.JsonMapper;
+
 /**
  * One turn: a lead's SMS comes in, the hard rules decide whether the agent may answer, the agent
  * reports on the turn ({@link AgentOutput}), the {@link ConversationPolicy} applies that report,
  * and everything is stored with the conversation.
  *
- * <p>For now this is one transaction around the agent call. That's fine with a stub, but a model
- * call takes seconds, and holding a database connection that long doesn't scale. When the model
- * arrives (commit 11) the turn splits into: store the inbound message, call the model outside a
- * transaction, store the reply under the conversation's optimistic lock.
+ * <p>A model call takes seconds, so it runs <em>between</em> two short transactions rather than
+ * holding a database connection open:
+ * <ol>
+ * <li>store the lead's message and apply the hard rules;</li>
+ * <li>call the model, with no transaction open;</li>
+ * <li>store its report and the reply. If another SMS from the lead arrived meanwhile, this reply
+ * is dropped (that newer turn answers both); an opt-out or abuse flag still applies.</li>
+ * </ol>
+ * Two turns for one conversation can't both commit step 3 (optimistic lock on the conversation).
  */
 @Service
 public class TurnService {
@@ -40,6 +46,19 @@ public class TurnService {
 	public record TurnResult(Conversation conversation, Optional<Message> reply, boolean duplicate) {
 	}
 
+	/** Step 1's outcome: either the turn is already over, or the model is needed for this message. */
+	private record Prepared(TurnResult finished, Conversation conversation, Long inboundId) {
+
+		static Prepared finished(TurnResult result) {
+			return new Prepared(result, null, null);
+		}
+
+		static Prepared needsModel(Conversation conversation, Long inboundId) {
+			return new Prepared(null, conversation, inboundId);
+		}
+
+	}
+
 	private final ConversationRepository conversations;
 	private final AgentReplier replier;
 	private final ConversationPolicy policy;
@@ -47,10 +66,12 @@ public class TurnService {
 	private final OptOuts optOuts;
 	private final AgentProperties agent;
 	private final JsonMapper json;
+	private final TransactionTemplate tx;
 	private final Clock clock;
 
 	TurnService(ConversationRepository conversations, AgentReplier replier, ConversationPolicy policy,
-			OptOutKeywords optOutKeywords, OptOuts optOuts, AgentProperties agent, JsonMapper json, Clock clock) {
+			OptOutKeywords optOutKeywords, OptOuts optOuts, AgentProperties agent, JsonMapper json,
+			PlatformTransactionManager transactions, Clock clock) {
 		this.conversations = conversations;
 		this.replier = replier;
 		this.policy = policy;
@@ -58,44 +79,69 @@ public class TurnService {
 		this.optOuts = optOuts;
 		this.agent = agent;
 		this.json = json;
+		this.tx = new TransactionTemplate(transactions);
 		this.clock = clock;
 	}
 
 	/** An SMS typed into the prototype UI, with no platform message id. */
-	@Transactional
 	public TurnResult handleInbound(Long conversationId, String body) {
 		return handleInbound(conversationId, null, body);
 	}
 
 	/**
-	 * @param platformMessageId the platform's id for this SMS; a repeat of an id already handled
-	 *                          returns the original outcome without running the agent again
+	 * @param platformMessageId the platform's id for this SMS. A repeat of an id already handled
+	 *                          returns the original outcome; a repeat of one whose turn failed
+	 *                          part-way resumes it.
+	 * @throws AgentUnavailableException if the model failed; the lead's message is kept
 	 */
-	@Transactional
 	public TurnResult handleInbound(Long conversationId, String platformMessageId, String body) {
-		Conversation conversation = conversations.findWithMessagesById(conversationId)
-				.orElseThrow(() -> new NoSuchElementException("No conversation " + conversationId));
+		Prepared prepared = tx.execute(status -> prepare(conversationId, platformMessageId, body));
+		if (prepared.finished() != null) {
+			return prepared.finished();
+		}
+		AgentOutput output = replier.reply(prepared.conversation());
+		return tx.execute(status -> complete(conversationId, prepared.inboundId(), output));
+	}
 
-		if (platformMessageId != null) {
-			Optional<TurnResult> retry = previousOutcome(conversation, platformMessageId);
-			if (retry.isPresent()) {
-				return retry.get();
-			}
+	private Prepared prepare(Long conversationId, String platformMessageId, String body) {
+		Conversation conversation = load(conversationId);
+
+		Message inbound = platformMessageId == null ? null : find(conversation, platformMessageId);
+		if (inbound != null && isSettled(conversation, inbound)) {
+			return Prepared.finished(new TurnResult(conversation, replyAfter(conversation, inbound), true));
+		}
+		if (inbound == null) {
+			// Always stored, even when the agent won't answer: it's the lead's message and our record.
+			inbound = Message.fromLead(platformMessageId, body.strip(), clock.instant());
+			conversation.append(inbound);
 		}
 
-		String text = body.strip();
-		// Always stored, even when the agent won't answer: it's the lead's message and our record.
-		Message inbound = Message.fromLead(platformMessageId, text, clock.instant());
-		conversation.append(inbound);
+		if (!mayReply(conversation, inbound.getBody())) {
+			return Prepared.finished(new TurnResult(conversation, Optional.empty(), false));
+		}
+		conversations.flush(); // assigns the inbound message's id, used to find it again in step 3
+		return Prepared.needsModel(conversation, inbound.getId());
+	}
 
-		if (!mayReply(conversation, text)) {
+	private TurnResult complete(Long conversationId, Long inboundId, AgentOutput output) {
+		Conversation conversation = load(conversationId);
+		Message inbound = conversation.getMessages().stream()
+				.filter(m -> inboundId.equals(m.getId()))
+				.findFirst()
+				.orElseThrow();
+		inbound.recordAgentOutput(json.writeValueAsString(output));
+
+		boolean superseded = conversation.getMessages().stream()
+				.anyMatch(m -> m.getSender() == Sender.LEAD && m.getId() != null && m.getId() > inboundId);
+		if (superseded || conversation.getStatus().isTerminal()) {
+			policy.applyFlagsOnly(conversation, output);
+			conversations.flush(); // surface an optimistic-lock clash here, inside the transaction
 			return new TurnResult(conversation, Optional.empty(), false);
 		}
 
-		AgentOutput output = replier.reply(conversation);
-		inbound.recordAgentOutput(json.writeValueAsString(output));
 		Optional<Message> sent = policy.apply(conversation, output, clock.instant());
 		sent.ifPresent(conversation::append);
+		conversations.flush();
 		return new TurnResult(conversation, sent, false);
 	}
 
@@ -121,18 +167,31 @@ public class TurnService {
 		return true;
 	}
 
-	/** The reply that followed this inbound SMS the first time, if we've seen it. */
-	private static Optional<TurnResult> previousOutcome(Conversation conversation, String platformMessageId) {
+	private Conversation load(Long conversationId) {
+		return conversations.findWithMessagesById(conversationId)
+				.orElseThrow(() -> new NoSuchElementException("No conversation " + conversationId));
+	}
+
+	private static Message find(Conversation conversation, String platformMessageId) {
+		return conversation.getMessages().stream()
+				.filter(m -> Objects.equals(m.getPlatformMessageId(), platformMessageId))
+				.findFirst()
+				.orElse(null);
+	}
+
+	/** The turn for this message finished: the model reported, the agent replied, or it's over. */
+	private static boolean isSettled(Conversation conversation, Message inbound) {
+		return inbound.getAgentOutput() != null
+				|| replyAfter(conversation, inbound).isPresent()
+				|| conversation.getStatus().isTerminal();
+	}
+
+	private static Optional<Message> replyAfter(Conversation conversation, Message inbound) {
 		List<Message> messages = conversation.getMessages();
-		for (int i = 0; i < messages.size(); i++) {
-			if (Objects.equals(messages.get(i).getPlatformMessageId(), platformMessageId)) {
-				Optional<Message> reply = i + 1 < messages.size() && messages.get(i + 1).getSender() == Sender.AGENT
-						? Optional.of(messages.get(i + 1))
-						: Optional.empty();
-				return Optional.of(new TurnResult(conversation, reply, true));
-			}
-		}
-		return Optional.empty();
+		int i = messages.indexOf(inbound);
+		return i + 1 < messages.size() && messages.get(i + 1).getSender() == Sender.AGENT
+				? Optional.of(messages.get(i + 1))
+				: Optional.empty();
 	}
 
 }
