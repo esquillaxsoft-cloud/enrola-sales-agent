@@ -1,0 +1,21 @@
+# Builds and tests every push to main and every PR on Linux, with the same
+# Maven wrapper a reviewer uses, so "works on my Windows machine" isn't the only evidence.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test
+        run: ./mvnw -B verify
