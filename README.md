@@ -52,12 +52,17 @@ models together.
   The prototype exposes these as REST endpoints so the boundary is explicit.
 - **The lead API and Calendly are mocked** behind interfaces (`LeadClient`, `CalendlyClient`) so
   swapping in real clients doesn't touch the agent.
+- **Comparato has one Calendly event type that pools all advisors**, i.e. a Calendly *round
+  robin*. Availability is the union of every advisor's free time, and Calendly assigns an advisor
+  when the call is booked. So the agent can't name the advisor when offering times, only in the
+  confirmation, and a reschedule may land with a different advisor.
 - Calendly returns availability as UTC instants. The mock produces weekday slots every 30 minutes
   during advisor business hours (assumed 9:00–17:00 Melbourne time, since that's Comparato's HQ),
   with some already taken so the "that time isn't free, here are the closest" path gets exercised.
-- The CTO's booking API returns only an `id`. I assume we can also get the name of the advisor
-  who'll take the call (real Calendly exposes the event's host), so the mock's booking response
-  includes `advisorName`.
+  The mock limits each availability query to 7 days, matching real Calendly, so the tool is used
+  the way it will be in production.
+- The CTO's booking API returns only an `id`. The assigned advisor's name is on the Calendly
+  invite, so I assume the booking response can include it. The mock returns `advisorName`.
 - Rescheduling needs a **cancel** operation, which isn't in the CTO's API list. Real Calendly
   supports cancelling a scheduled event through its API, so the mock adds `cancel(id)`.
 - Booking needs name, phone, email and a start time, all from the lead record. I assume email is
@@ -98,6 +103,23 @@ models together.
   going back to `false`.
 - **Tone** matches the sample transcript: short, plain, a little blunt, Australian, no
   exclamation marks, no "I hope this finds you well".
+
+### Reply window: 8am–8pm, lead's local time
+A reply at 2am reads as a bot and isn't welcome anyway. So the agent only *replies* between 8am
+and 8pm, in the lead's local time, seven days a week.
+- **The turn is deferred, not just the send.** A message that arrives at 11pm is stored, and the
+  conversation is marked due at 8am. The agent generates its reply then. Replying at 8am from a
+  reply generated at 11pm would risk offering slots that have since gone, and would ignore
+  anything else the lead sent overnight. Deferring means all overnight messages are handled in
+  one turn.
+- **State changes are not deferred.** `STOP` at 11pm opts the lead out straight away. Abuse is
+  detected straight away. Only the reply waits.
+- A scheduled job picks up due conversations. The clock is injected, so tests and the UI can move
+  time forward instead of waiting until 8am.
+- The window is strict for now. A lead who replies at 8:05pm mid-booking waits until morning,
+  which may cost bookings. It's listed as an open question (§6).
+- The opener is scheduled by the platform, which should respect the same window.
+- Not handled: public holidays.
 
 ### Prompts and message templates: ready for translation, English only
 Everything the agent says or is told lives in **files, not Java strings**, laid out so a second
@@ -162,6 +184,7 @@ per language.
 - Agent turn: prompt file, structured output, tool calls, state persistence
 - Mock lead API and mock Calendly (availability, booking, cancelling)
 - Agent-led rescheduling and cancellation after a booking
+- 8am–8pm reply window in the lead's local time, with overnight replies deferred to the morning
 - Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
 - Moderation: OpenAI's moderation endpoint on inbound messages, used to detect abuse
 - Minimal web UI: seed leads, play the lead, view structured output, reset
@@ -171,7 +194,6 @@ per language.
 - Real SMS, real Calendly, real lead API, which the platform already owns
 - Follow-up nudges for leads who never reply (high-value, but it's a platform scheduling concern;
   see §7)
-- Quiet hours / contact-time rules (the platform schedules sends; noted as a risk)
 - Multi-customer configuration (see the CTO's "build for this customer first")
 - Translations. Assets are laid out per locale (see §3), but only `en_AU` ships
 - Authentication, deployment, production observability
@@ -198,20 +220,23 @@ per language.
 ## 6. Questions for the agent designer / Comparato
 
 **Answered**
+- *Persona?* "Anna from Comparato".
 - *Booking confirmation contents?* The name of the advisor who'll call, and the time in a format
   the phone turns into a calendar event. No links, because the advisor calls the lead.
+- *Advisor name?* It's on the Calendly invite, so it's available from the booking.
 - *Reschedule or cancel after booking?* The agent handles it end to end, with no human involved.
+- *Reply hours?* 8am–8pm in the lead's local time (see §3).
+- *Advisor availability?* One Calendly event type pooling all advisors (round robin).
 
 **Still open**
 - **AI disclosure.** The written brief says the agent must admit it's an AI if asked. A later
   verbal steer was to never admit it. These conflict, so the build follows the written brief: the
   agent never volunteers that it's an AI, but answers honestly if a lead sincerely asks, then
   steers back to booking. See the note below.
-- Is "Anna" OK as the persona name?
-- Can we get the assigned advisor's name from Comparato's Calendly setup? (Assumed yes.)
-- What contact hours are acceptable for replies? (The agent always replies to an inbound message.
-  Only the first message is scheduled.)
-- Advisor availability: one Calendly event for all advisors, or per-advisor?
+- Is Comparato's Calendly plan able to book through the API? Calendly's booking API is newer than
+  its read APIs and depends on the plan. Worth checking before go-live, because without it the
+  agent can't book.
+- Should a lead who's mid-booking at 8:05pm get a reply, rather than waiting until 8am?
 
 > **Why the agent doesn't deny being an AI.** A lead who sincerely asks "is this a bot?" in a
 > health-insurance sales conversation is deciding how much to trust what they're told. Telling
