@@ -29,7 +29,7 @@ deliverable is the smallest thing that can safely hold a real conversation with 
 
 ## 2. Architecture in one paragraph
 
-Spring Boot (Java 21) with MVC, Thymeleaf and Bootstrap, matching Enrola's stack. An inbound SMS
+Spring Boot 4.1 (Java 21) with MVC, Thymeleaf and Bootstrap, matching Enrola's stack. An inbound SMS
 hits an endpoint that stands in for the Enrola platform. The service loads the conversation from
 the database, applies the deterministic pre-checks (opt-out keywords, conversation already
 ended), then makes **one** OpenAI Responses API call with a single versioned system prompt, the
@@ -56,7 +56,7 @@ The order is deliberate:
 
 | # | Commit | What's in it | How to check it |
 |---|---|---|---|
-| 1 | **Scaffold** | Spring Boot 3, Java 21, Maven wrapper, Thymeleaf, Bootstrap (WebJar, so it runs offline), H2, `.env` loading | `./mvnw spring-boot:run` starts, and the context-load test passes |
+| 1 | **Scaffold** | Spring Boot 4.1, Java 21, Maven wrapper, Thymeleaf, Bootstrap (WebJar, so it runs offline), H2, `.env` loading | `./mvnw spring-boot:run` starts, and the context-load test passes |
 | 2 | **UI landing page** | Shared layout and a leads page with an empty state | The page renders |
 | 3 | **Persistence design** | `Lead`, `Conversation` (status, agent version, locale, objection count, booking), `Message`; Flyway migration so the schema is reviewable SQL | Repository tests: save and reload a conversation with messages |
 | 4 | **Mock lead API and seeding** | `LeadClient` interface and stub with the brief's sample leads (John, Jane, Lauren); "Seed lead" button | Seeded leads appear on the landing page |
@@ -285,8 +285,20 @@ per language.
 
 ## 8. Running it
 
-_To be written once the skeleton exists._ Requires JDK 21. Copy `.env.example` to `.env` and add
-your OpenAI API key.
+Requires **JDK 21 or newer**. Nothing else: the Maven wrapper downloads Maven, and the database
+is an embedded H2 file under `./data/`.
+
+1. Copy `.env.example` to `.env` and add your OpenAI API key. (Real environment variables
+   override `.env`.)
+2. Run `./mvnw spring-boot:run` (`mvnw.cmd spring-boot:run` on Windows).
+3. Open http://localhost:8080. The H2 console is at http://localhost:8080/h2-console
+   (JDBC URL `jdbc:h2:file:./data/sales-agent`, user `sa`, no password).
+
+Tests: `./mvnw test`. They use an in-memory database, so they never touch `./data/`. To start
+from a clean slate, stop the app and delete `./data/`.
+
+Stack: Spring Boot 4.1, Java 21, Thymeleaf, Bootstrap 5.3 (WebJar), Spring Data JPA, Flyway,
+H2 in PostgreSQL compatibility mode.
 
 ## 9. How I used AI
 
