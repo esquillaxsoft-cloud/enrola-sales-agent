@@ -20,7 +20,6 @@ import com.enrola.salesagent.conversation.ConversationStarter;
 import com.enrola.salesagent.conversation.ConversationStarter.StartResult;
 import com.enrola.salesagent.lead.Lead;
 import com.enrola.salesagent.lead.LeadRepository;
-import com.enrola.salesagent.lead.LeadService;
 import com.enrola.salesagent.lead.SampleLeads;
 
 /** The landing page: leads, their conversations, and seeding sample leads to play with. */
@@ -33,15 +32,13 @@ class LeadsController {
 
 	private final LeadRepository leads;
 	private final ConversationRepository conversations;
-	private final LeadService leadService;
 	private final ConversationStarter starter;
 	private final SampleLeads samples;
 
-	LeadsController(LeadRepository leads, ConversationRepository conversations, LeadService leadService,
-			ConversationStarter starter, SampleLeads samples) {
+	LeadsController(LeadRepository leads, ConversationRepository conversations, ConversationStarter starter,
+			SampleLeads samples) {
 		this.leads = leads;
 		this.conversations = conversations;
-		this.leadService = leadService;
 		this.starter = starter;
 		this.samples = samples;
 	}
@@ -56,9 +53,8 @@ class LeadsController {
 	@PostMapping("/leads")
 	String seed(@RequestParam String externalId, RedirectAttributes redirect) {
 		try {
-			Lead lead = leadService.ingest(externalId);
-			StartResult result = starter.start(lead);
-			redirect.addFlashAttribute("notice", describe(lead, result));
+			StartResult result = starter.startLead(externalId);
+			redirect.addFlashAttribute("notice", describe(result));
 		}
 		catch (NoSuchElementException | IllegalArgumentException e) {
 			redirect.addFlashAttribute("error", e.getMessage());
@@ -84,7 +80,8 @@ class LeadsController {
 				.toList();
 	}
 
-	private static String describe(Lead lead, StartResult result) {
+	private static String describe(StartResult result) {
+		Lead lead = result.lead();
 		Long id = result.conversation().getId();
 		return switch (result.outcome()) {
 			case STARTED -> "Started conversation #" + id + " with " + lead.getGivenName() + ".";
