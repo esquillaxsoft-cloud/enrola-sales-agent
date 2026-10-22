@@ -71,6 +71,7 @@ The order is deliberate:
 | 14 | **Structured output in the UI** | State panel next to each message: flags, status, tool calls, agent version | Visible on the conversation page |
 | 15 | **End-to-end scenarios** | Opt-in tests against the real model: books a call, objects twice, prompt injection, asks if it's an AI; code-based assertions on the structured output | `./mvnw test -Pscenarios` |
 | 16 | **Docs finish** | README (how to run) and this document: measuring quality at scale, what breaks at 750 leads a week, how I used AI | Read them |
+| 17 | **Eval suite (if time permits)** | Quality vs cost per model and prompt version, designed so evals stay cheap (§7) | `./mvnw test -Peval` writes a model-by-model report |
 
 Milestones: **after 7** the platform contract is real with a stub agent. **After 12** the agent
 can book a call. Everything after that hardens and proves it.
@@ -347,6 +348,37 @@ instances. It's a sanity check of our own code under Comparato's volume, not a c
 - The designer said more example transcripts are coming, and those will likely raise more.
 
 ## 7. With more time
+
+### Planned last, if time permits: a cost-aware eval suite (delivery plan row 17)
+The CTO wants to move towards evals but worries their cost will outpace their value. So the
+suite is designed for cents per run, and **you only pay again for what changed**. It's mainly a
+demonstration of measuring quality against cost across OpenAI models and prompt versions, not a
+tuning harness.
+
+- **Mostly one-turn cases.** A case is a fixed transcript so far plus the lead's next SMS: one model
+  call per case, repeatable, testing one behaviour. A few multi-turn cases script every lead reply,
+  so no second model is needed to play the lead.
+- **Checks done in code, not by another model.** One assertion per behaviour, on the structured
+  output: `objection`/`unsubscribe`/`abusive` set when they should be, reply ≤ 320 characters, no
+  `!`, admits being an AI when asked, ends with a question, never names a fund. An optional cheap
+  model-as-judge for exactly one fuzzy thing (tone), off by default. No single "9/10" score.
+- **A results cache** keyed by model + prompt-bundle hash + case hash. Re-running with nothing
+  changed costs $0; editing the prompt re-runs only what that prompt affects.
+- **A hard budget per run** (e.g. $0.50), tallied from the token usage in each response; the run
+  stops when it's reached.
+- **On demand, never in CI** (`-Peval`), like the load test.
+- **The same code path as production:** the real `PromptBuilder` and OpenAI client, so it judges
+  what ships. This needs the client to return token usage and latency, not just log them.
+- **About 10 starting cases, as JSON files a designer can add to:** bot question, prompt
+  injection, off-topic joke, first vs second objection, soft opt-out, abuse, a health event, a
+  question about fees, a lead with no provider, and the brief's Lauren transcript. Booking cases
+  follow the booking tools.
+- **Report** (`target/eval-report.md`): per model, pass rate, p50 latency, tokens in (and how much
+  was cached) and out, cost per case, and **cost per passing case**, plus which assertions failed.
+  Prices live in a config table, since they change. Default comparison: `gpt-6.1-sol` (current),
+  `gpt-6-luna` (cheap), `gpt-6-astra` (top tier).
+- **How it's used:** a new prompt version or model is promoted only if it passes every safety
+  assertion the current one passes, with the cost difference visible next to it.
 
 ### Potential feature: re-subscribing after an opt-out (designed, not built)
 A lead who texts STOP and later changes their mind is stuck today. The Spam Act allows consent to
