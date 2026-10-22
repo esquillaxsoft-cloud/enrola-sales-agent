@@ -44,7 +44,7 @@ class LandingPageTest {
 
 		mvc.perform(get("/"))
 				.andExpect(content().string(allOf(containsString("lead-john"), containsString("ACTIVE"),
-						containsString("btn btn-sm btn-warning"))));
+						containsString("badge ms-1 text-bg-warning"))));
 	}
 
 	@Test

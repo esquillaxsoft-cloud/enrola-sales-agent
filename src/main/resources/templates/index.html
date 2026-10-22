@@ -45,13 +45,14 @@
             <tr th:each="row : ${leads}">
                 <td>
                     <th:block th:if="${row.conversation}">
-                        <!-- Amber: in progress. Green: call booked. Grey: over (opted out, declined, ended). -->
-                        <a class="btn btn-sm"
-                           th:with="status=${row.conversation.status.name()}"
-                           th:classappend="${status == 'ACTIVE'} ? 'btn-warning' : (${status == 'BOOKED'} ? 'btn-success' : 'btn-secondary')"
+                        <a class="btn btn-sm btn-primary"
                            th:href="@{/conversations/{id}(id=${row.conversation.id})}"
                            th:aria-label="|View ${row.lead.givenName}'s conversation|">VIEW</a>
-                        <span class="small text-muted ms-1" th:text="${row.conversation.status}">ACTIVE</span>
+                        <!-- Amber: in progress. Green: call booked. Grey: over (opted out, declined, ended). -->
+                        <span class="badge ms-1"
+                              th:with="status=${row.conversation.status.name()}"
+                              th:classappend="${status == 'ACTIVE'} ? 'text-bg-warning' : (${status == 'BOOKED'} ? 'text-bg-success' : 'text-bg-secondary')"
+                              th:text="${row.conversation.status}">ACTIVE</span>
                         <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
                             Same number as another lead
                         </div>
