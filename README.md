@@ -33,8 +33,9 @@ Spring Boot (Java 21) with MVC, Thymeleaf and Bootstrap, matching Enrola's stack
 hits an endpoint that stands in for the Enrola platform. The service loads the conversation from
 the database, applies the deterministic pre-checks (opt-out keywords, conversation already
 ended), then makes **one** OpenAI Responses API call with a single versioned system prompt, the
-Comparato info pack, the lead's data and the full transcript. The model can call two tools,
-`get_available_slots` and `book_call`, backed by a mocked Calendly client, and returns a
+Comparato info pack, the lead's data and the full transcript. The model can call
+`get_available_slots`, `book_call`, `reschedule_call` and `cancel_call`, backed by a mocked
+Calendly client, and returns a
 **structured output** (reply text plus state flags). Code validates that output (length, state
 transitions), persists it, and returns it to the platform.
 
@@ -54,6 +55,11 @@ models together.
 - Calendly returns availability as UTC instants. The mock produces weekday slots every 30 minutes
   during advisor business hours (assumed 9:00–17:00 Melbourne time, since that's Comparato's HQ),
   with some already taken so the "that time isn't free, here are the closest" path gets exercised.
+- The CTO's booking API returns only an `id`. I assume we can also get the name of the advisor
+  who'll take the call (real Calendly exposes the event's host), so the mock's booking response
+  includes `advisorName`.
+- Rescheduling needs a **cancel** operation, which isn't in the CTO's API list. Real Calendly
+  supports cancelling a scheduled event through its API, so the mock adds `cancel(id)`.
 - Booking needs name, phone, email and a start time, all from the lead record. I assume email is
   present. If it isn't, booking still goes ahead with phone only, because the advisor calls by
   phone anyway.
@@ -71,9 +77,24 @@ models together.
   reason for the call, so it also helps the goal.
 - **Times are shown in the lead's local time**, derived from their state (WA is Perth time, NSW
   is Sydney time, and so on). The lead's state is the only time-zone signal we have.
+- **The booking confirmation is rendered by code from a template, not written by the model.** It
+  names the advisor who'll call and states the time in a fixed format, in the lead's local time
+  (e.g. `Tue 28 Jul 2026, 9:30 am`), which iOS and Android recognise and offer to add to the
+  calendar. Because the model doesn't write it, the format can't drift. There are no links: the
+  advisor calls the lead's phone.
 - **Offered slots can go stale.** A lead might pick "12" two days after we offered it.
   `book_call` re-checks availability, and if the slot has gone the agent offers the nearest
   alternatives instead of confirming a booking that doesn't exist.
+- **Booked isn't the end.** A booked lead can reschedule by text, and the agent handles it end
+  to end with no human involved: check availability, offer times, move the booking, send a new
+  confirmation. The `reschedule_call` tool **books the new slot before cancelling the old one**,
+  in code, so a failure part-way never leaves the lead without a call. The conversation stores
+  the current booking id and time, so a reschedule request two days later has everything it
+  needs.
+- **An outright cancellation** ("can't do it, cancel") cancels the booking, sets `goalMet` back to
+  `false`, and the agent makes one attempt to rebook under the same objection rule. Platform
+  caveat: a "goal met" event may already have been sent, so the platform needs to handle the flag
+  going back to `false`.
 - **Tone** matches the sample transcript: short, plain, a little blunt, Australian, no
   exclamation marks, no "I hope this finds you well".
 
@@ -88,6 +109,7 @@ src/main/resources/agents/comparato/v1/       <- one versioned bundle per custom
   knowledge_en_AU.md                          <- Comparato info pack
   sms/opener-known-provider_en_AU.txt         <- user-facing SMS templates
   sms/opener-no-provider_en_AU.txt
+  sms/booking-confirmed_en_AU.txt
   opt-out-keywords_en_AU.txt                  <- STOP / unsubscribe words are language-specific too
 ```
 
@@ -116,6 +138,8 @@ per language.
 | Situation | Reply sent? | State |
 |---|---|---|
 | Call booked | Yes, a confirmation | `goalMet=true`, status `BOOKED` |
+| Call rescheduled | Yes, a new confirmation | `goalMet=true`, status `BOOKED` |
+| Booking cancelled by lead | Yes, one rebook attempt | `goalMet=false`, status `ACTIVE` |
 | `STOP` / `unsubscribe` / `opt out` keyword | No; the platform handles any compliance confirmation | `unsubscribed=true`, status `OPTED_OUT` |
 | "Please stop texting me" (no keyword) | No | Model flags `unsubscribed=true`, status `OPTED_OUT` |
 | Second objection | Yes, a polite close ("I'll leave it there...") | status `DECLINED` |
@@ -128,14 +152,15 @@ per language.
 - **Goodbye loops are prevented in two layers.** After `BOOKED`, the agent only replies if the
   lead says something that needs a reply (a question, or a reschedule request). The model returns
   `reply: null` for "thanks!"-type messages. Code also caps the number of agent messages per
-  conversation as a backstop. If the cap is hit, the conversation is flagged for a human rather
-  than looping.
+  conversation as a backstop. If the cap is hit, the agent stops replying and the conversation
+  ends with status `ENDED` and reason `MESSAGE_CAP`.
 
 ## 4. In scope / explicitly out of scope
 
 **In scope**
 - Agent turn: prompt file, structured output, tool calls, state persistence
-- Mock lead API and mock Calendly (availability and booking)
+- Mock lead API and mock Calendly (availability, booking, cancelling)
+- Agent-led rescheduling and cancellation after a booking
 - Deterministic guardrails: opt-out, 320 characters, terminal states, objection count, message cap
 - Moderation: OpenAI's moderation endpoint on inbound messages, used to detect abuse
 - Minimal web UI: seed leads, play the lead, view structured output, reset
@@ -145,7 +170,6 @@ per language.
 - Real SMS, real Calendly, real lead API, which the platform already owns
 - Follow-up nudges for leads who never reply (high-value, but it's a platform scheduling concern;
   see §7)
-- Rescheduling or cancelling an existing booking (the agent hands this to a human for now)
 - Quiet hours / contact-time rules (the platform schedules sends; noted as a risk)
 - Multi-customer configuration (see the CTO's "build for this customer first")
 - Translations. Assets are laid out per locale (see §3), but only `en_AU` ships
@@ -170,15 +194,31 @@ per language.
 - **A templated opener** gives up personalisation on the first message in exchange for
   predictability and approval-ability.
 
-## 6. Open questions for the agent designer / Comparato
+## 6. Questions for the agent designer / Comparato
 
-- Is "Anna" OK as a persona name, given we'll admit to being an AI when asked?
-- Should the booking confirmation include anything else (advisor name, calendar link)?
-- What should happen when a booked lead wants to reschedule or cancel? (Currently: hand to a
-  human.)
+**Answered**
+- *Booking confirmation contents?* The name of the advisor who'll call, and the time in a format
+  the phone turns into a calendar event. No links, because the advisor calls the lead.
+- *Reschedule or cancel after booking?* The agent handles it end to end, with no human involved.
+
+**Still open**
+- **AI disclosure.** The written brief says the agent must admit it's an AI if asked. A later
+  verbal steer was to never admit it. These conflict, so the build follows the written brief: the
+  agent never volunteers that it's an AI, but answers honestly if a lead sincerely asks, then
+  steers back to booking. See the note below.
+- Is "Anna" OK as the persona name?
+- Can we get the assigned advisor's name from Comparato's Calendly setup? (Assumed yes.)
 - What contact hours are acceptable for replies? (The agent always replies to an inbound message.
   Only the first message is scheduled.)
 - Advisor availability: one Calendly event for all advisors, or per-advisor?
+
+> **Why the agent doesn't deny being an AI.** A lead who sincerely asks "is this a bot?" in a
+> health-insurance sales conversation is deciding how much to trust what they're told. Telling
+> them no is a misleading statement of fact, which is a risk under the Australian Consumer Law and
+> a poor fit with Comparato's PHII Code obligations and its "transparency" positioning. It's also
+> unnecessary: an honest, brief answer ("Yeah, I'm Comparato's AI assistant. The call's with a
+> real advisor though.") keeps the conversation on track, because the thing being sold is a call
+> with a human.
 
 ## 7. With more time
 
