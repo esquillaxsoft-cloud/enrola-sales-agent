@@ -100,6 +100,23 @@ class PlatformApiTest {
 	}
 
 	@Test
+	void stopTellsThePlatformToSendNothingAndThatTheLeadUnsubscribed() throws Exception {
+		long id = startJohn();
+
+		mvc.perform(inbound(id, "sms-1", "STOP"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.outbound").value(nullValue()))
+				.andExpect(jsonPath("$.state.status").value("OPTED_OUT"))
+				.andExpect(jsonPath("$.state.unsubscribed").value(true))
+				.andExpect(jsonPath("$.state.ended").value(true));
+
+		mvc.perform(post("/api/leads/lead-john-again/conversation"))
+				.andExpect(jsonPath("$.outcome").value("NUMBER_OPTED_OUT"))
+				.andExpect(jsonPath("$.outbound").value(nullValue()))
+				.andExpect(jsonPath("$.state.unsubscribed").value(true));
+	}
+
+	@Test
 	void inboundWithoutAMessageIdStillWorks() throws Exception {
 		long id = startJohn();
 

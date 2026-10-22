@@ -9,13 +9,17 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.enrola.salesagent.config.AgentProperties;
 import com.enrola.salesagent.conversation.Conversation;
 import com.enrola.salesagent.conversation.ConversationRepository;
+import com.enrola.salesagent.conversation.EndReason;
 import com.enrola.salesagent.conversation.Message;
+import com.enrola.salesagent.conversation.OptOuts;
 import com.enrola.salesagent.conversation.Sender;
 
 /**
- * One turn: a lead's SMS comes in, the agent replies, and both are stored with the conversation.
+ * One turn: a lead's SMS comes in, the hard rules decide whether the agent may reply, the agent
+ * replies, and everything is stored with the conversation.
  *
  * <p>For now this is one transaction around the agent call. That's fine with a stub, but a model
  * call takes seconds, and holding a database connection that long doesn't scale. When the model
@@ -26,7 +30,7 @@ import com.enrola.salesagent.conversation.Sender;
 public class TurnService {
 
 	/**
-	 * @param reply     the agent's SMS to send, if it replied
+	 * @param reply     the agent's SMS to send, or empty when it stays silent
 	 * @param duplicate true when this inbound SMS was seen before (a webhook retry); nothing new
 	 *                  happened and {@code reply} is the reply sent the first time
 	 */
@@ -35,11 +39,18 @@ public class TurnService {
 
 	private final ConversationRepository conversations;
 	private final AgentReplier replier;
+	private final OptOutKeywords optOutKeywords;
+	private final OptOuts optOuts;
+	private final AgentProperties agent;
 	private final Clock clock;
 
-	TurnService(ConversationRepository conversations, AgentReplier replier, Clock clock) {
+	TurnService(ConversationRepository conversations, AgentReplier replier, OptOutKeywords optOutKeywords,
+			OptOuts optOuts, AgentProperties agent, Clock clock) {
 		this.conversations = conversations;
 		this.replier = replier;
+		this.optOutKeywords = optOutKeywords;
+		this.optOuts = optOuts;
+		this.agent = agent;
 		this.clock = clock;
 	}
 
@@ -65,11 +76,40 @@ public class TurnService {
 			}
 		}
 
-		conversation.append(Message.fromLead(platformMessageId, body.strip(), clock.instant()));
+		String text = body.strip();
+		// Always stored, even when the agent won't answer: it's the lead's message and our record.
+		conversation.append(Message.fromLead(platformMessageId, text, clock.instant()));
+
+		if (!mayReply(conversation, text)) {
+			return new TurnResult(conversation, Optional.empty(), false);
+		}
+
 		AgentReply reply = replier.reply(conversation);
 		Message sent = Message.fromModel(reply.body(), reply.output(), clock.instant());
 		conversation.append(sent);
 		return new TurnResult(conversation, Optional.of(sent), false);
+	}
+
+	/**
+	 * The hard rules, checked in code before the model is involved, so none of them depends on a
+	 * prompt behaving. May change the conversation's state.
+	 */
+	private boolean mayReply(Conversation conversation, String text) {
+		// Opted out, declined or ended: never send anything again.
+		if (conversation.getStatus().isTerminal()) {
+			return false;
+		}
+		// Spam Act: an explicit opt-out is honoured at once, with no reply and no model call.
+		if (optOutKeywords.isOptOut(conversation, text)) {
+			optOuts.optOut(conversation);
+			return false;
+		}
+		// Backstop against reply loops (e.g. "thanks!" / "you too!" forever).
+		if (conversation.agentMessageCount() >= agent.maxAgentMessages()) {
+			conversation.end(EndReason.MESSAGE_CAP);
+			return false;
+		}
+		return true;
 	}
 
 	/** The reply that followed this inbound SMS the first time, if we've seen it. */

@@ -88,6 +88,8 @@ class LeadsController {
 			case ALREADY_STARTED -> lead.getGivenName() + " already has conversation #" + id + ".";
 			case SAME_NUMBER_OPEN -> lead.getPhone() + " already has an open conversation (#" + id
 					+ "), so no new conversation was started.";
+			case NUMBER_OPTED_OUT -> lead.getPhone() + " has opted out, so nothing was sent. Conversation #" + id
+					+ " records " + lead.getGivenName() + " as opted out.";
 		};
 	}
 
