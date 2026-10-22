@@ -56,7 +56,8 @@
                 </td>
                 <td>
                     <th:block th:if="${row.conversation}">
-                        <span th:text="|#${row.conversation.id}|">#1</span>
+                        <a th:href="@{/conversations/{id}(id=${row.conversation.id})}"
+                           th:text="|#${row.conversation.id}|">#1</a>
                         <span class="badge text-bg-secondary" th:text="${row.conversation.status}">ACTIVE</span>
                         <div class="small text-muted" th:if="${row.sharedWithAnotherLead}">
                             Same number as another lead
