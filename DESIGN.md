@@ -511,9 +511,6 @@ it isn't needed to get Comparato live, and the compliance questions in §7 shoul
 
 ## 9. How I used AI
 
-> _Draft: to review, correct and put in my own words before submitting. The two cost figures need
-> filling in._
-
 **What I used:** Claude Code (in the Claude desktop app) as a pair for the whole build. OpenAI only
 for what the product does: the agent's replies and moderation.
 
@@ -541,7 +538,5 @@ show as reversals in the history:
 
 That's why the tests, the Linux CI, the browser checks and the scenarios exist.
 
-**What it cost:** OpenAI for the product during development: about [fill in] (a scenario run is
-about 4 cents; the load test uses none). Claude Code: [fill in from my usage page]. Worth it: the
-plan, PR and review loop covered far more of the brief than I'd have managed by hand in the time,
-and the decisions stayed mine.
+**What it cost:** OpenAI for the product during development: about $4 (a scenario run is
+about 4 cents; the load test uses none). Claude Code: used about 4 hours of Opus 5.5 at medium reasoning.
