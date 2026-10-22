@@ -18,7 +18,7 @@ import com.enrola.salesagent.scheduling.SlotFinder;
 
 /**
  * Booking, moving and cancelling a lead's call, keeping Calendly and the conversation in step.
- * The agent's tools (commit 12) call these; the ordering rules live here, not in the prompt.
+ * The agent's tools ({@code BookingTools}) call these; the ordering rules live here, not in the prompt.
  */
 @Service
 public class BookingService {

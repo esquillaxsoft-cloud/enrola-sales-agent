@@ -36,7 +36,7 @@ import jakarta.validation.Valid;
  * what to say and the conversation state. Every response carries that state.
  *
  * <p>Inbound SMS are addressed by conversation id, which the platform gets back from the start
- * call. Unauthenticated: this is a local prototype (README §4).
+ * call. Unauthenticated: this is a local prototype (DESIGN.md §4).
  */
 @RestController
 @RequestMapping("/api")

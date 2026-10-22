@@ -394,31 +394,34 @@ suite costs cents per run, and **you only pay again for what changed**. It's mai
 demonstration of measuring quality against cost across OpenAI models and prompt versions, not a
 tuning harness.
 
-- **Mostly one-turn cases.** A case is a fixed transcript so far plus the lead's next SMS: one model
-  call per case, repeatable, testing one behaviour. A few multi-turn cases script every lead reply,
-  so no second model is needed to play the lead.
-- **Checks done in code, not by another model.** One assertion per behaviour, on the structured
-  output: `objection`/`unsubscribe`/`abusive` set when they should be, reply ≤ 320 characters, no
-  `!`, admits being an AI when asked, ends with a question, never names a fund. An optional cheap
-  model-as-judge for exactly one fuzzy thing (tone), off by default. No single "9/10" score.
+- **One model call per case.** A case is the lead's real opener, an optional scripted `history`,
+  and the lead's next SMS. The agent's single reply is judged, so a case is repeatable and tests one
+  behaviour. No second model plays the lead.
+- **Checks done in code, not by another model.** One check per behaviour, on the structured output:
+  all three flags (`objection`, `unsubscribe`, `abusive`) every time, since one set wrongly is as bad
+  as one missed; reply ≤ 320 characters and no `!` on every reply; and per case, regexes (admits
+  being an AI, never names a fund), ends with a question, and the expected stage. No model-as-judge,
+  so tone isn't measured. No single "9/10" score.
 - **A results cache** keyed by model + prompt-bundle hash + case input. Re-running with nothing
   changed costs $0; editing the prompt re-runs only what that prompt affects. It caches model
   outputs, not verdicts, so changing a check never costs a token.
-- **A hard budget per run** (e.g. $0.50), tallied from the token usage in each response; the run
-  stops when it's reached.
+- **A hard budget per run** ($1 by default, `-Deval.budget=...`), tallied from the token usage in
+  each response. Once it's reached, the remaining cases are skipped and reported as such.
 - **On demand, never in CI** (`-Peval`), like the load test.
-- **The same code path as production:** the real `PromptBuilder` and OpenAI client, so it judges
-  what ships. This needs the client to return token usage and latency, not just log them.
-- **About 10 starting cases, as JSON files a designer can add to:** bot question, prompt
-  injection, off-topic joke, first vs second objection, soft opt-out, abuse, a health event, a
-  question about fees, a lead with no provider, and the brief's Lauren transcript. Booking cases
-  follow the booking tools.
-- **Report** (`target/eval-report.md`): per model, pass rate, p50 latency, tokens in (and how much
-  was cached) and out, cost per case, and **cost per passing case**, plus which assertions failed.
-  Prices live in a config table, since they change. Default comparison: `gpt-6.1-sol` (current),
-  `gpt-6-luna` (cheap), `gpt-6-astra` (top tier).
-- **How it's used:** a new prompt version or model is promoted only if it passes every safety
-  assertion the current one passes, with the cost difference visible next to it.
+- **The same code path as production:** the real `PromptBuilder`, OpenAI client and booking tools,
+  so it judges what ships. Moderation isn't in the path: the abuse case tests the model's own flag.
+- **11 cases, as JSON files a designer can add to** (`src/test/resources/evals/cases/`): bot
+  question, prompt injection, off-topic joke, first objection, soft opt-out, abuse, a health event,
+  a question about fees, a request for advice, a lead with no provider, and the brief's Lauren
+  transcript. **Not covered:** booking (the end-to-end scenarios cover it against the real model),
+  a second objection (its goodbye is code, tested in unit tests), and a rude objection that isn't
+  abuse.
+- **Report** (`target/eval-report.md`): per model, cases and checks passed, p50 latency, tokens in
+  (and how much was cached) and out, cost per case, and **cost per passing case**, plus which checks
+  failed. Prices live in `evals/prices.json`, since they change. Default comparison: `gpt-6.1-sol`
+  (current), `gpt-6-luna` (cheap), `gpt-6-astra` (top tier); `-Deval.models=...` to change it.
+- **How I'd use it:** promote a new prompt version or model only if it passes every check the
+  current one passes, with the cost difference visible next to it.
 
 **First results** (`evals/results/2026-10-22-comparato-v1-2efae896508b.md`, 11 cases):
 
@@ -487,10 +490,15 @@ Roughly: a keyword asset, two templates, one column, one state change and tests.
 it isn't needed to get Comparato live, and the compliance questions in §7 should be answered first.
 
 ### Other next steps
+- **Follow-up nudges** for leads who stop replying, and a human handoff for edge cases.
 - **Faster booking turns:** keep the last offered slots on the conversation, so "the first one"
   books in one round instead of re-fetching (§5).
+- **Grow the evals:** booking cases, a rude objection that isn't abuse, and replaying real
+  transcripts against a new prompt version once there are live conversations (§6).
+- **Per-customer configuration:** the second-customer changes in §6, turning this into the product
+  the CTO described.
 - **Virtual threads and a queue for turns;** backoff on OpenAI rate limits; alerts on turn
-  failures.
+  failures; idempotency on booking retries.
 - **Postgres** in production and in CI (Testcontainers), instead of H2 in PostgreSQL mode.
 
 ### What I'd delete
@@ -500,15 +508,6 @@ it isn't needed to get Comparato live, and the compliance questions in §7 shoul
   `ConversationStarter.restart`.
 - **`TurnViews`' handling of the old turn-record format,** once the prototype database is thrown
   away.
-
-- **Prompt evaluation**: replay a library of real transcripts against a new prompt version and
-  compare specific, checkable outcomes (booking rate, opt-out rate, messages to booking,
-  guardrail violations) before promoting it.
-- **Per-customer configuration**: prompt, info pack, lead custom fields, opener templates and
-  booking provider as data, turning this into the product the CTO described.
-- **Follow-up nudges** for unresponsive leads, and human handoff for edge cases.
-- **Queue-based processing**, retries with idempotency on booking, and per-conversation cost
-  tracking.
 
 ## 9. How I used AI
 

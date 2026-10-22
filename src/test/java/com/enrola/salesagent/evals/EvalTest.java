@@ -55,7 +55,7 @@ import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Quality against cost, per OpenAI model, for the current prompt bundle (DESIGN.md §8).
+ * Quality against cost, per OpenAI model, for the current prompt bundle (DESIGN.md §6).
  *
  * <p>Each case is one model call through the production client ({@link OpenAiAgentReplier}, the
  * real {@link PromptBuilder} and tools), judged by {@link Checks}. Outputs are cached by model +

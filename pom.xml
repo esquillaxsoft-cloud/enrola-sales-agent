@@ -131,7 +131,7 @@
 				<test.excludedGroups></test.excludedGroups>
 			</properties>
 		</profile>
-		<!-- ./mvnw test -Peval : quality vs cost per model; cached, budget-capped (see DESIGN.md section 8) -->
+		<!-- ./mvnw test -Peval : quality vs cost per model; cached, budget-capped (see DESIGN.md section 6) -->
 		<profile>
 			<id>eval</id>
 			<properties>

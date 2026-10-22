@@ -5,7 +5,7 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Comparato's Calendly: one round-robin event type pooling every advisor (README §3). Calendly
+ * Comparato's Calendly: one round-robin event type pooling every advisor (DESIGN.md §3). Calendly
  * picks the advisor when a call is booked. Stubbed for the prototype.
  */
 public interface CalendlyClient {
