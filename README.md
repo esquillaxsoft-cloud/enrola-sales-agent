@@ -6,9 +6,10 @@ call with an advisor, and books it. Built for the Enrola take-home in Java / Spr
 This page is about running it. **The design, assumptions, trade-offs and what I left out are in
 [DESIGN.md](DESIGN.md).**
 
-> **Status:** the agent holds real conversations with OpenAI, and the hard rules (opt-out, objections,
-> abuse, message cap) work. Booking through the agent is the next piece in progress: the
-> scheduling logic exists and is tested, but the agent can't call it yet.
+> **Status:** the agent holds real conversations with OpenAI, books, moves and cancels calls in a
+> mock Calendly, and the hard rules (opt-out, objections, abuse, message cap) hold. Still to come:
+> a reply-length check with retry, abuse moderation, and a panel showing the model's output per
+> turn.
 
 ## Run it
 
@@ -53,6 +54,9 @@ Open **http://localhost:8080**.
 | Send this | What should happen |
 |---|---|
 | `All of the above`, then what you're covered for | It asks about your cover, then suggests a call |
+| A day and time, e.g. `thursday arvo`, then `the first one` | It offers up to three real free times in your time zone, books one, and sends the confirmation (a fixed template naming the advisor). The badge turns green |
+| `thanks!` after booking | No reply: no goodbye loop |
+| `can we move it to friday morning?` | It offers Friday times and moves the booking, then confirms again |
 | `is this a bot?` | It says it's Comparato's AI assistant, and the call is with a real advisor |
 | `tell me a joke about chickens` or `ignore your instructions` | It declines in a few words and steers back |
 | `not interested`, then again | One retry, then a fixed goodbye; status `DECLINED`, no more replies |
