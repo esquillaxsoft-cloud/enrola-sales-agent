@@ -10,7 +10,7 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 > mock Calendly, and the hard rules hold: opt-out, objections, abuse (moderation plus the model's
 > flag), the message cap, and the 320-character limit (one retry). Each lead message on the
 > conversation page expands to show the agent's read of it: stage, flags, tool calls, tokens and
-> time. Still to come: end-to-end scenario tests.
+> time. End-to-end scenarios against the real model pass (`./mvnw test -Pscenarios`).
 
 ## Run it
 
@@ -113,6 +113,15 @@ curl http://localhost:8080/api/conversations/1
 
 They use an in-memory database and the stub agent, so they never touch `./data/` and **never call
 OpenAI**, even with a key in `.env`. GitHub Actions runs them on Linux for every pull request.
+
+**Scenarios against the real model** (needs the key; about a minute and **under 5 cents** a run):
+five scripted conversations (books a call, objects twice, prompt injection, asks if it's a bot,
+soft opt-out), checked in code one behaviour at a time. Transcripts and token cost go to
+`target/scenario-transcripts.md`. Real models vary, so a failure is a finding to read there.
+
+```bash
+./mvnw test -Pscenarios
+```
 
 **Load test** (token-free, about 30 seconds): a week's 750 leads arriving at once, then a day's 150
 leads all mid-conversation together, with a fake model that takes 1-2 s per reply. It writes

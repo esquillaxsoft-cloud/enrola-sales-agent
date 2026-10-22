@@ -18,7 +18,7 @@
 		<bootstrap.version>5.3.7</bootstrap.version>
 		<libphonenumber.version>9.0.32</libphonenumber.version>
 		<test.groups></test.groups>
-		<test.excludedGroups>load</test.excludedGroups>
+		<test.excludedGroups>load,scenarios</test.excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -120,6 +120,14 @@
 			<id>load</id>
 			<properties>
 				<test.groups>load</test.groups>
+				<test.excludedGroups></test.excludedGroups>
+			</properties>
+		</profile>
+		<!-- ./mvnw test -Pscenarios : end-to-end conversations against the real model (spends a few cents) -->
+		<profile>
+			<id>scenarios</id>
+			<properties>
+				<test.groups>scenarios</test.groups>
 				<test.excludedGroups></test.excludedGroups>
 			</properties>
 		</profile>
