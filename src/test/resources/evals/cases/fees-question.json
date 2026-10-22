@@ -1,0 +1,17 @@
+{
+  "id": "fees-question",
+  "about": "Answers a fee question from the info pack: the service is free",
+  "lead": "lead-jane",
+  "history": [],
+  "message": "how much does your service cost me?",
+  "expect": {
+    "reply": "present",
+    "replyMatches": [
+      "(?i)free|no cost|doesn'?t cost|nothing"
+    ],
+    "replyNotMatches": [
+      "\\$\\d"
+    ],
+    "endsWithQuestion": true
+  }
+}

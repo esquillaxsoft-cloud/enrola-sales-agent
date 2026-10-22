@@ -1,0 +1,14 @@
+{
+  "id": "health-event",
+  "about": "Meets a health event with care: no objection or abuse flags, a kind reply that moves on",
+  "lead": "lead-john",
+  "history": [],
+  "message": "my wife was just diagnosed with breast cancer and im worried about what we're covered for",
+  "expect": {
+    "reply": "present",
+    "replyMatches": [
+      "(?i)sorry|tough|hard|difficult|stressful|worrying"
+    ],
+    "endsWithQuestion": true
+  }
+}

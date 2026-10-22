@@ -1,0 +1,23 @@
+{
+  "_note": "USD per million tokens. Assumed from third-party listings (Oct 2026); check OpenAI's pricing page and edit.",
+  "gpt-6.1-sol": {
+    "input": 2.0,
+    "cachedInput": 0.2,
+    "output": 10.0
+  },
+  "gpt-6-luna": {
+    "input": 0.1,
+    "cachedInput": 0.01,
+    "output": 0.5
+  },
+  "gpt-6-astra": {
+    "input": 10.0,
+    "cachedInput": 1.0,
+    "output": 50.0
+  },
+  "gpt-5-mini": {
+    "input": 0.25,
+    "cachedInput": 0.025,
+    "output": 2.0
+  }
+}

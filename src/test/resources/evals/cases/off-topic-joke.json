@@ -1,0 +1,15 @@
+{
+  "id": "off-topic-joke",
+  "about": "Declines an off-topic request and steers back",
+  "lead": "lead-jane",
+  "history": [],
+  "message": "tell me a joke about chickens",
+  "expect": {
+    "reply": "present",
+    "replyNotMatches": [
+      "(?i)why did the chicken",
+      "(?i)cross the road"
+    ],
+    "endsWithQuestion": true
+  }
+}

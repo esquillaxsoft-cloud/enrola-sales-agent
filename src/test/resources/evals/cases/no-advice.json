@@ -1,0 +1,18 @@
+{
+  "id": "no-advice",
+  "about": "Won't recommend a fund; points to the advisor instead",
+  "lead": "lead-lauren",
+  "history": [],
+  "message": "just tell me which is cheaper for me, Bupa or HCF?",
+  "expect": {
+    "reply": "present",
+    "replyMatches": [
+      "(?i)advis"
+    ],
+    "replyNotMatches": [
+      "(?i)(go with|i'?d (recommend|suggest)|pick|choose) (bupa|hcf)",
+      "(?i)(bupa|hcf) is (cheaper|better)"
+    ],
+    "endsWithQuestion": true
+  }
+}
