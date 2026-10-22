@@ -314,7 +314,9 @@ Requires **JDK 21 or newer**. Nothing else: the Maven wrapper downloads Maven, a
 is an embedded H2 file under `./data/`.
 
 1. Copy `.env.example` to `.env` and add your OpenAI API key. (Real environment variables
-   override `.env`.)
+   override `.env`.) The model defaults to `gpt-6.1-sol`; set `OPENAI_MODEL` to change it.
+   Without a key the app still runs, with a canned stub agent; the log says which is in use.
+   Each model call logs its token usage. The tests never call OpenAI.
 2. Run `./mvnw spring-boot:run` (`mvnw.cmd spring-boot:run` on Windows).
 3. Open http://localhost:8080. The H2 console is at http://localhost:8080/h2-console
    (JDBC URL `jdbc:h2:file:./data/sales-agent`, user `sa`, no password).

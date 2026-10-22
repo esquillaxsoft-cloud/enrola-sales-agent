@@ -56,6 +56,20 @@ public class ConversationPolicy {
 		return Optional.of(Message.fromModel(output.reply().strip(), now));
 	}
 
+	/**
+	 * For a turn whose reply won't be sent (a newer SMS arrived, or the conversation has ended):
+	 * the flags that protect the lead still count. Objections aren't counted; the newer turn sees
+	 * the same message and judges it again.
+	 */
+	public void applyFlagsOnly(Conversation conversation, AgentOutput output) {
+		if (output.unsubscribe() && !conversation.isUnsubscribed()) {
+			optOuts.optOut(conversation);
+		}
+		else if (output.abusive() && !conversation.getStatus().isTerminal()) {
+			conversation.end(EndReason.ABUSIVE);
+		}
+	}
+
 	private String declinedMessage(Conversation conversation) {
 		String template = assets.text(conversation.getAgentVersion(), conversation.getLocale(),
 				"sms/" + DECLINED_TEMPLATE + ".txt");

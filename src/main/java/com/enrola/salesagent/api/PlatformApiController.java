@@ -3,6 +3,7 @@ package com.enrola.salesagent.api;
 import java.util.NoSuchElementException;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.enrola.salesagent.agent.AgentUnavailableException;
 import com.enrola.salesagent.agent.TurnService;
 import com.enrola.salesagent.agent.TurnService.TurnResult;
 import com.enrola.salesagent.api.ApiModels.ConversationState;
@@ -93,10 +95,16 @@ class PlatformApiController {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, e.getMessage());
 	}
 
-	/** Two requests for the same thing raced (e.g. a retried webhook); retrying is safe. */
-	@ExceptionHandler(DataIntegrityViolationException.class)
+	/** Two requests for the same thing raced (e.g. a retried webhook, two turns at once); retrying is safe. */
+	@ExceptionHandler({ DataIntegrityViolationException.class, ObjectOptimisticLockingFailureException.class })
 	ProblemDetail conflict() {
 		return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, "Concurrent request for the same resource; retry");
+	}
+
+	/** The model failed. The lead's SMS is stored; retrying with the same messageId resumes the turn. */
+	@ExceptionHandler(AgentUnavailableException.class)
+	ProblemDetail agentUnavailable(AgentUnavailableException e) {
+		return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
 	}
 
 }

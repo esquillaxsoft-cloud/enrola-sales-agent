@@ -3,17 +3,14 @@ package com.enrola.salesagent.agent;
 import java.util.List;
 import java.util.Locale;
 
-import org.springframework.stereotype.Component;
-
 import com.enrola.salesagent.agent.AgentOutput.Stage;
 import com.enrola.salesagent.conversation.Conversation;
 
 /**
  * A canned agent, so the whole loop, including objection handling, can be tried in the UI before
  * any model is wired in. It spots a few obvious objections by phrase; the model will do this
- * properly.
+ * properly. Used when no OpenAI key is configured (see AgentConfig).
  */
-@Component
 class StubAgentReplier implements AgentReplier {
 
 	private static final List<String> OBJECTIONS = List.of("not interested", "no thanks", "too busy");
