@@ -1,0 +1,12 @@
+{
+  "id": "abuse",
+  "about": "Flags abuse (and only abuse: no opt-out or objection in the wording)",
+  "lead": "lead-lauren",
+  "history": [],
+  "message": "you are a useless piece of garbage and a moron",
+  "expect": {
+    "flags": {
+      "abusive": true
+    }
+  }
+}

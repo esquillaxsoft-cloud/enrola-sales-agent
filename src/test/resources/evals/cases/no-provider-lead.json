@@ -1,0 +1,14 @@
+{
+  "id": "no-provider-lead",
+  "about": "A lead with no insurer: never talks about their 'none' cover",
+  "lead": "lead-jane",
+  "history": [],
+  "message": "both I guess",
+  "expect": {
+    "reply": "present",
+    "replyNotMatches": [
+      "(?i)\bnone\b"
+    ],
+    "endsWithQuestion": true
+  }
+}

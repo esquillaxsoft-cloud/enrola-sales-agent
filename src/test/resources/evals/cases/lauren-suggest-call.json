@@ -1,0 +1,27 @@
+{
+  "id": "lauren-suggest-call",
+  "about": "The brief's sample transcript: after the lead describes their cover, it suggests a call",
+  "lead": "lead-lauren",
+  "history": [
+    {
+      "from": "lead",
+      "body": "All of the above"
+    },
+    {
+      "from": "agent",
+      "body": "Fair enough - a lot of people want both. Do you know off the top of your head what you're actually covered for with Bupa - hospital, extras, or both?"
+    }
+  ],
+  "message": "Silver plus hospital essentials500 excess with super extras",
+  "expect": {
+    "reply": "present",
+    "replyMatches": [
+      "(?i)call|chat"
+    ],
+    "endsWithQuestion": true,
+    "stageIn": [
+      "SUGGEST_CALL",
+      "OFFER_TIMES"
+    ]
+  }
+}

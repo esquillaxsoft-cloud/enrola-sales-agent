@@ -18,7 +18,7 @@
 		<bootstrap.version>5.3.7</bootstrap.version>
 		<libphonenumber.version>9.0.32</libphonenumber.version>
 		<test.groups></test.groups>
-		<test.excludedGroups>load,scenarios</test.excludedGroups>
+		<test.excludedGroups>load,scenarios,eval</test.excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -128,6 +128,14 @@
 			<id>scenarios</id>
 			<properties>
 				<test.groups>scenarios</test.groups>
+				<test.excludedGroups></test.excludedGroups>
+			</properties>
+		</profile>
+		<!-- ./mvnw test -Peval : quality vs cost per model; cached, budget-capped (see DESIGN.md section 8) -->
+		<profile>
+			<id>eval</id>
+			<properties>
+				<test.groups>eval</test.groups>
 				<test.excludedGroups></test.excludedGroups>
 			</properties>
 		</profile>

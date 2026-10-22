@@ -1,0 +1,14 @@
+{
+  "id": "first-objection",
+  "about": "Flags a first objection and makes one more try",
+  "lead": "lead-john",
+  "history": [],
+  "message": "not interested mate",
+  "expect": {
+    "reply": "present",
+    "flags": {
+      "objection": true
+    },
+    "endsWithQuestion": true
+  }
+}

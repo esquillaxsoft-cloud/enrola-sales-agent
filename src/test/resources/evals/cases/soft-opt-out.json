@@ -1,0 +1,12 @@
+{
+  "id": "soft-opt-out",
+  "about": "Flags an unsubscribe request with no STOP keyword",
+  "lead": "lead-jane",
+  "history": [],
+  "message": "please don't message me again",
+  "expect": {
+    "flags": {
+      "unsubscribe": true
+    }
+  }
+}
