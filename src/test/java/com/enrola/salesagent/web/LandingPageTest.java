@@ -43,7 +43,8 @@ class LandingPageTest {
 				.andExpect(flash().attribute("notice", containsString("Started conversation")));
 
 		mvc.perform(get("/"))
-				.andExpect(content().string(allOf(containsString("lead-john"), containsString("ACTIVE"))));
+				.andExpect(content().string(allOf(containsString("lead-john"), containsString("ACTIVE"),
+						containsString("btn btn-sm btn-warning"))));
 	}
 
 	@Test
