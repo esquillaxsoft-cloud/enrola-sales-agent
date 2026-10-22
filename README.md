@@ -188,7 +188,7 @@ per language.
 | `STOP` / `unsubscribe` / `opt out` keyword | No; the platform handles any compliance confirmation | `unsubscribed=true`, status `OPTED_OUT` |
 | "Please stop texting me" (no keyword) | No | Model flags `unsubscribed=true`, status `OPTED_OUT` |
 | Second objection | Yes, a polite close ("I'll leave it there...") | status `DECLINED` |
-| Abusive lead | No | status `ENDED_ABUSIVE` |
+| Abusive lead | No | status `ENDED`, reason `ABUSIVE` |
 
 - **Opt-out keywords are handled in code before the model is called.** It's a legal requirement
   (Spam Act), so it must be deterministic and must not cost a token.
