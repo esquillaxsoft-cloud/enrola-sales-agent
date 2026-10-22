@@ -51,7 +51,9 @@ models together.
   message Y for lead X*. Both return the outbound message (if any) and the conversation state.
   The prototype exposes these as REST endpoints so the boundary is explicit.
 - **The lead API and Calendly are mocked** behind interfaces (`LeadClient`, `CalendlyClient`) so
-  swapping in real clients doesn't touch the agent.
+  swapping in real clients doesn't touch the agent. The mocks assume the real APIs can do what
+  the agent needs (read availability, book, cancel, return the advisor's name). Confirming that
+  against Comparato's actual Calendly account is a go-live task, not a prototype one.
 - **Comparato has one Calendly event type that pools all advisors**, i.e. a Calendly *round
   robin*. Availability is the union of every advisor's free time, and Calendly assigns an advisor
   when the call is booked. So the agent can't name the advisor when offering times, only in the
@@ -74,9 +76,10 @@ models together.
   (750 a week), it carries the opt-out text, and Comparato will likely want to approve it word
   for word. Variants depend on whether we know the current provider. Costs nothing and can't go
   wrong.
-- **The persona is "Anna from Comparato"**, as in the sample transcript. The agent never
-  volunteers that it's an AI, but if a lead sincerely asks, it says so briefly and returns to the
-  booking. It never claims to be human (see §6).
+- **The persona is "Anna from Comparato"**, as in the sample transcript. If the lead asks,
+  the agent admits it's an AI, as the brief requires. It says so in one line and goes back to the
+  booking: the call is with a real advisor, which is the point. It doesn't volunteer it unprompted,
+  and it never claims to be human.
 - **The agent doesn't give insurance advice.** Comparato operates under the PHII Code of Conduct.
   The agent can answer questions about Comparato itself (from the info pack) and about the call,
   but anything about which policy or cover is right gets deferred to the advisor. That's the
@@ -216,22 +219,11 @@ per language.
 - *Reschedule or cancel after booking?* The agent handles it end to end, with no human involved.
 - *Reply hours?* Any time the lead messages (see §5).
 - *Advisor availability?* One Calendly event type pooling all advisors (round robin).
+- *AI disclosure?* As the brief says: if the lead asks, the agent admits it's an AI.
 
 **Still open**
-- **AI disclosure.** The written brief says the agent must admit it's an AI if asked. A later
-  verbal steer was to never admit it. These conflict, so the build follows the written brief: the
-  agent never volunteers that it's an AI, but answers honestly if a lead sincerely asks, then
-  steers back to booking. See the note below.
-- Is Comparato's Calendly plan able to book through the API? Calendly's booking API is newer than
-  its read APIs and depends on the plan. Worth checking before go-live, because without it the
-  agent can't book.
-> **Why the agent doesn't deny being an AI.** A lead who sincerely asks "is this a bot?" in a
-> health-insurance sales conversation is deciding how much to trust what they're told. Telling
-> them no is a misleading statement of fact, which is a risk under the Australian Consumer Law and
-> a poor fit with Comparato's PHII Code obligations and its "transparency" positioning. It's also
-> unnecessary: an honest, brief answer ("Yeah, I'm Comparato's AI assistant. The call's with a
-> real advisor though.") keeps the conversation on track, because the thing being sold is a call
-> with a human.
+- None right now. The designer said more example transcripts are coming, and those will likely
+  raise new ones.
 
 ## 7. With more time
 
