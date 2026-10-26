@@ -13,7 +13,7 @@ enforced in code before or after the model, never left to the prompt. Every turn
 its tools and cost, and shown next to the message in the UI. Delivery plan rows 1-16 are done
 (§2), and so is the eval suite (row 17, §6).
 
-**Reading guide:** §2 for the architecture, flow charts and how it was built, §3 for assumptions, §5 for
+**Reading guide:** §2 for the architecture and how it was built ([FLOWS.md](FLOWS.md) for flow charts and example journeys), §3 for assumptions, §5 for
 trade-offs and the load test, §6 for how I'd measure quality, the eval results and a second customer, §9 for how
 I used AI.
 
@@ -61,165 +61,9 @@ the CTO suggested. The interesting engineering is in the seams around the model,
 models together.
 
 ### How it flows
-GitHub draws these from the source below; each box names the class doing the work.
-
-**The parts of the system.** Solid arrows are calls; dotted arrows read the agent bundle (prompt,
-info pack, templates).
-
-```mermaid
-flowchart LR
-    subgraph Callers["Who calls it"]
-        PLATFORM["Enrola platform<br/>(stand-in: REST API)"]
-        UI["Prototype UI<br/>Thymeleaf + Bootstrap"]
-    end
-
-    subgraph App["Spring Boot app"]
-        subgraph Entry["Entry points"]
-            API["PlatformApiController"]
-            WEB["LeadsController<br/>ConversationController"]
-        end
-        subgraph Conversation["Conversation logic"]
-            START["ConversationStarter<br/>LeadService · Opener"]
-            TURN["TurnService<br/>OptOutKeywords · ConversationPolicy · SmsText"]
-        end
-        subgraph Agent["Agent"]
-            MOD["OpenAiModerator"]
-            AGENT["OpenAiAgentReplier<br/>PromptBuilder · BookingTools"]
-            BOOK["BookingService · SlotFinder"]
-        end
-        ASSETS["Agent bundle: agents/comparato/v1<br/>prompt · info pack · SMS templates · opt-out words"]
-    end
-
-    subgraph Outside["Outside the app"]
-        DB[("H2 + Flyway<br/>lead · conversation · message · opt_out")]
-        OPENAI["OpenAI<br/>Responses API · Moderation"]
-        CAL["Calendly (stub)"]
-        LEADAPI["Lead API (stub)"]
-    end
-
-    PLATFORM --> API
-    UI --> WEB
-    API --> START
-    API --> TURN
-    WEB --> START
-    WEB --> TURN
-    START --> LEADAPI
-    START --> DB
-    TURN --> DB
-    TURN --> MOD --> OPENAI
-    TURN --> AGENT --> OPENAI
-    AGENT --> BOOK
-    BOOK --> CAL
-    BOOK --> DB
-    START -.-> ASSETS
-    AGENT -.-> ASSETS
-```
-
-**Starting a conversation**, one transaction. The four ways it can end are what the API returns.
-
-```mermaid
-flowchart TD
-    START(["Start a lead<br/>POST /api/leads/{leadId}/conversation<br/>or Seed lead in the UI"])
-    INGEST["Fetch and normalise the lead<br/>LeadService → LeadClient (stub)<br/>phone to E.164 · PhoneNumbers"]
-    OWN{"This lead already has<br/>a conversation?"}
-    SUPP{"Number on the<br/>suppression list?<br/>OptOuts"}
-    OPEN{"Same number has an<br/>open conversation?"}
-    NEW["New conversation<br/>pinned to agent version + locale"]
-    OPENER["Opening SMS from a template<br/>Opener · known provider / no provider"]
-    SAVE[("Saved in H2")]
-    R_NEW(["201 · the opener to send + state"])
-    R_OWN(["200 · ALREADY_STARTED<br/>nothing to send"])
-    R_OPEN(["200 · SAME_NUMBER_OPEN<br/>points at the existing conversation"])
-    R_OUT(["200 · NUMBER_OPTED_OUT<br/>recorded as opted out, nothing sent"])
-
-    subgraph TX["One transaction · ConversationStarter.startLead"]
-        INGEST
-        OWN
-        SUPP
-        OPEN
-        NEW
-        OPENER
-        SAVE
-    end
-
-    START --> INGEST --> OWN
-    OWN -- yes --> R_OWN
-    OWN -- no --> SUPP
-    SUPP -- yes --> R_OUT
-    SUPP -- no --> OPEN
-    OPEN -- yes --> R_OPEN
-    OPEN -- no --> NEW --> OPENER --> SAVE --> R_NEW
-```
-
-**One inbound SMS: a turn.** The hard rules come before the model; the model runs with no
-transaction open; the outcome is applied in a second short transaction. Every "no reply" exit
-still returns the conversation's state to the platform.
-
-```mermaid
-flowchart TD
-    IN(["Inbound SMS<br/>POST /api/conversations/{id}/inbound<br/>or Send in the UI"])
-
-    subgraph S1["Step 1 · short transaction · TurnService"]
-        LOAD["Load the conversation<br/>ConversationRepository → H2"]
-        DUP{"messageId<br/>seen before?"}
-        SETTLED{"That turn<br/>finished?"}
-        STORE["Store the lead's SMS"]
-        TERM{"Conversation<br/>already ended?"}
-        KW{"Opt-out keyword?<br/>OptOutKeywords"}
-        CAP{"Agent message<br/>cap reached?"}
-    end
-
-    X_DUP(["Original reply returned<br/>duplicate: true"])
-    X_TERM(["No reply"])
-    X_KW(["No reply · OPTED_OUT<br/>number suppressed · OptOuts"])
-    X_CAP(["No reply · ENDED<br/>MESSAGE_CAP"])
-
-    subgraph S2["Step 2 · no transaction · the model"]
-        MOD{"Abusive?<br/>OpenAiModerator → OpenAI moderation"}
-        PROMPT["Build the prompt · PromptBuilder<br/>system prompt + info pack + lead + transcript<br/>from agents/comparato/v1"]
-        LLM["OpenAI Responses API · OpenAiAgentReplier<br/>strict JSON schema · store: false"]
-        TOOLS{"Tool calls?"}
-        RUN["Run each tool in its own transaction<br/>BookingTools → SlotFinder / BookingService<br/>→ Calendly (stub)"]
-        LEN{"Reply over 320<br/>characters? SmsText"}
-    end
-
-    X_MOD(["No reply · ENDED<br/>ABUSIVE"])
-    X_ERR(["503 · retrying the same<br/>messageId resumes the turn"])
-
-    subgraph S3["Step 3 · short transaction · TurnService"]
-        RECORD["Record the turn on the lead's SMS<br/>AgentTurn: output · tool calls · tokens · time"]
-        BOOKED{"A call booked or<br/>moved this turn?"}
-        CONFIRM["Confirmation from the<br/>booking-confirmed template"]
-        SUPER{"A newer SMS arrived,<br/>or conversation ended?"}
-        FLAGS["Apply the opt-out and<br/>abuse flags only, no reply"]
-        POLICY["ConversationPolicy<br/>unsubscribe → OptOuts · abusive → ENDED<br/>2nd objection → DECLINED + goodbye template<br/>otherwise the model's reply, plain punctuation"]
-    end
-
-    OUT(["Response to the platform<br/>SMS to send, or none<br/>+ state: status · goalMet · unsubscribed · ended"])
-
-    IN --> LOAD --> DUP
-    DUP -- yes --> SETTLED
-    SETTLED -- yes --> X_DUP
-    SETTLED -- "no: resume" --> TERM
-    DUP -- no --> STORE --> TERM
-    TERM -- yes --> X_TERM
-    TERM -- no --> KW
-    KW -- yes --> X_KW
-    KW -- no --> CAP
-    CAP -- yes --> X_CAP
-    CAP -- no --> MOD
-    MOD -- yes --> X_MOD
-    MOD -- no --> PROMPT --> LLM --> TOOLS
-    TOOLS -- "yes · up to 5 rounds" --> RUN --> LLM
-    TOOLS -- "no: structured output" --> LEN
-    LEN -- "yes: ask once more" --> PROMPT
-    LEN -- "still too long" --> X_ERR
-    LEN -- no --> RECORD --> BOOKED
-    BOOKED -- yes --> CONFIRM --> OUT
-    BOOKED -- no --> SUPER
-    SUPER -- yes --> FLAGS --> OUT
-    SUPER -- no --> POLICY --> OUT
-```
+Flow charts of the system, of starting a conversation and of a single turn, plus example
+journeys (booking, rescheduling, objections, opt-outs, abuse, duplicate leads, failures) and the
+parts of the system each one engages, are in **[FLOWS.md](FLOWS.md)**.
 
 ### Delivery plan
 Each row is a small commit (occasionally two) that builds, runs and can be reviewed on its own.
