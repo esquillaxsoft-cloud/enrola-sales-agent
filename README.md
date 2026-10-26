@@ -14,7 +14,7 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 > suite compares quality against cost per model (`./mvnw test -Peval`, results in `evals/results/`).
 >
 > **Short on time?** Run it, seed John, and book a call (see [Try it](#try-it)). Then open DESIGN.md
-> §2 (how it works), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
+> §2 (how it works, with [flow charts](DESIGN.md#how-it-flows)), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
 
 ## Run it
 
