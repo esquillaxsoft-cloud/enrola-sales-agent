@@ -13,7 +13,7 @@ enforced in code before or after the model, never left to the prompt. Every turn
 its tools and cost, and shown next to the message in the UI. Delivery plan rows 1-16 are done
 (§2), and so is the eval suite (row 17, §6).
 
-**Reading guide:** §2 for the architecture and how it was built, §3 for assumptions, §5 for
+**Reading guide:** §2 for the architecture and how it was built ([FLOWS.md](FLOWS.md) for flow charts and example journeys), §3 for assumptions, §5 for
 trade-offs and the load test, §6 for how I'd measure quality, the eval results and a second customer, §9 for how
 I used AI.
 
@@ -59,6 +59,11 @@ steps, so no database connection is held while the model thinks:
 No multi-agent orchestration and no agent framework. One prompt, structured output and tools, as
 the CTO suggested. The interesting engineering is in the seams around the model, not in chaining
 models together.
+
+### How it flows
+Flow charts of the system, of starting a conversation and of a single turn, plus example
+journeys (booking, rescheduling, objections, opt-outs, abuse, duplicate leads, failures) and the
+parts of the system each one engages, are in **[FLOWS.md](FLOWS.md)**.
 
 ### Delivery plan
 Each row is a small commit (occasionally two) that builds, runs and can be reviewed on its own.

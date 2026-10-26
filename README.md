@@ -4,7 +4,8 @@ An SMS agent that texts Comparato's health-insurance leads, makes the case for a
 call with an advisor, and books it. Built for the Enrola take-home in Java / Spring Boot.
 
 This page is about running it. **The design, assumptions, trade-offs and what I left out are in
-[DESIGN.md](DESIGN.md).**
+[DESIGN.md](DESIGN.md).** How a message flows through the system, with example journeys, is in
+[FLOWS.md](FLOWS.md).
 
 > **Status:** the agent holds real conversations with OpenAI, books, moves and cancels calls in a
 > mock Calendly, and the hard rules hold: opt-out, objections, abuse (moderation plus the model's
@@ -14,7 +15,7 @@ This page is about running it. **The design, assumptions, trade-offs and what I 
 > suite compares quality against cost per model (`./mvnw test -Peval`, results in `evals/results/`).
 >
 > **Short on time?** Run it, seed John, and book a call (see [Try it](#try-it)). Then open DESIGN.md
-> §2 (how it works), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
+> §2 (how it works; flow charts and example journeys are in [FLOWS.md](FLOWS.md)), §5 (trade-offs and the load test) and §6 (quality at scale, a second customer).
 
 ## Run it
 
